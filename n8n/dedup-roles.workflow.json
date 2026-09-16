@@ -1,0 +1,85 @@
+{
+  "name": "Dedup roles (Rust service)",
+  "nodes": [
+    {
+      "parameters": { "rule": { "interval": [ { "field": "hours", "hoursInterval": 6 } ] } },
+      "name": "Every 6 hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/roles?select=id,company,title,location,url,source,stage,fit_score,why,description,first_seen,dedup_group,is_primary&limit=10000",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [ { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" } ] },
+        "options": {}
+      },
+      "name": "Read roles",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, 0],
+      "notes": "Header auth credential: Authorization = Bearer <service role key>. Reads every row in one call (raise `limit` past your row count)."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Collect all rows into one request body for the dedup service.\nconst roles = $input.all().map(i => i.json);\nreturn [{ json: { roles } }];"
+      },
+      "name": "Batch into one request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.DEDUP_SERVICE_URL }}/dedup",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ roles: $json.roles }) }}",
+        "options": { "timeout": 60000 }
+      },
+      "name": "POST /dedup",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Emit one item per row whose dedup_group or is_primary changed.\nconst before = new Map($('Batch into one request').first().json.roles.map(r => [r.id, r]));\nconst out = [];\nfor (const a of $json.assignments) {\n  const b = before.get(a.id);\n  if (!b) continue;\n  const prevGroup = b.dedup_group ?? null;\n  const prevPrimary = b.is_primary ?? true;\n  if (prevGroup !== a.dedup_group || prevPrimary !== a.is_primary) {\n    out.push({ json: { id: a.id, dedup_group: a.dedup_group, is_primary: a.is_primary } });\n  }\n}\nreturn out;"
+      },
+      "name": "Only changed rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 0]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/roles?id=eq.{{ $json.id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [ { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" }, { "name": "Prefer", "value": "return=minimal" } ] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ dedup_group: $json.dedup_group, is_primary: $json.is_primary }) }}",
+        "options": {}
+      },
+      "name": "Write dedup_group + is_primary",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1100, 0]
+    }
+  ],
+  "connections": {
+    "Every 6 hours": { "main": [ [ { "node": "Read roles", "type": "main", "index": 0 } ] ] },
+    "Read roles": { "main": [ [ { "node": "Batch into one request", "type": "main", "index": 0 } ] ] },
+    "Batch into one request": { "main": [ [ { "node": "POST /dedup", "type": "main", "index": 0 } ] ] },
+    "POST /dedup": { "main": [ [ { "node": "Only changed rows", "type": "main", "index": 0 } ] ] },
+    "Only changed rows": { "main": [ [ { "node": "Write dedup_group + is_primary", "type": "main", "index": 0 } ] ] }
+  },
+  "settings": { "executionOrder": "v1" }
+}
