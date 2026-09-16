@@ -19,6 +19,8 @@ type Patch = Partial<Pick<Role, "stage" | "notes">>;
 type Store = {
   roles: Role[];
   byId: Map<string, Role>;
+  /** dedup_group id (= primary id) → every member of the group, primary first. */
+  groups: Map<string, Role[]>;
   status: Status;
   error: string | null;
   lastLoaded: number | null;
@@ -128,10 +130,21 @@ export function RolesProvider({ children }: { children: ReactNode }) {
   );
 
   const byId = useMemo(() => new Map(roles.map((r) => [r.id, r])), [roles]);
+  const groups = useMemo(() => {
+    const m = new Map<string, Role[]>();
+    for (const r of roles) {
+      if (!r.dedup_group) continue;
+      const list = m.get(r.dedup_group) ?? [];
+      if (r.id === r.dedup_group) list.unshift(r);
+      else list.push(r);
+      m.set(r.dedup_group, list);
+    }
+    return m;
+  }, [roles]);
 
   const value = useMemo<Store>(
-    () => ({ roles, byId, status, error, lastLoaded, refresh, update, updateMany, notice, setNotice }),
-    [roles, byId, status, error, lastLoaded, refresh, update, updateMany, notice]
+    () => ({ roles, byId, groups, status, error, lastLoaded, refresh, update, updateMany, notice, setNotice }),
+    [roles, byId, groups, status, error, lastLoaded, refresh, update, updateMany, notice]
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

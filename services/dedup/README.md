@@ -37,8 +37,9 @@ at worst, applied to twice.
      **and** the locations share a place (or one is unknown).
    Pairs that disagree on degree level or on internship-vs-co-op never match.
 3. **Group and pick a primary.** Matches are unioned into connected
-   components. Each group's id is its smallest member id, so it is stable run
-   to run without any state. The primary is chosen by, in order: a row the
+   components. Each group's id is the primary's own id, so a row is primary
+   exactly when `dedup_group` is null or equals its id and the table needs no
+   extra column. The primary is chosen by, in order: a row the
    user already acted on (pipeline stage, then dismissed) beats one they
    haven't; scored beats unscored; higher fit score; has a URL; has a
    reasoning; longer description; earlier first seen; id.
@@ -91,9 +92,11 @@ sleep when idle, so the first call after a quiet period takes a few seconds.
 
 ## Wire into n8n
 
-1. Run `supabase/migrations/2026-09-16-is-primary.sql` in the Supabase SQL editor.
-2. Import `n8n/dedup-roles.workflow.json`. Set env vars `SUPABASE_URL`,
-   `SUPABASE_SERVICE_KEY`, `DEDUP_SERVICE_URL`, and a header-auth credential
-   carrying `Authorization: Bearer <service role key>` on the two Supabase nodes.
-3. The workflow reads every row, posts them in one request, and writes back
-   only the rows whose `dedup_group` or `is_primary` changed.
+The workflow "Internship Radar — Dedup (Rust)" in your n8n reads every row with
+the Supabase node, posts them in one request, and writes back only the rows
+whose `dedup_group` changed. Set the service URL on the "POST /dedup" node
+once the Render deploy is live. `n8n/dedup-roles.workflow.json` is the same
+workflow as an importable file.
+
+The optional `supabase/migrations/2026-09-16-is-primary.sql` adds an index on
+`dedup_group`; nothing requires it.

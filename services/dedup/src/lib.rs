@@ -93,7 +93,8 @@ pub struct Evidence {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Group {
-    /// Stable id: the lexicographically smallest member id.
+    /// The primary's own id. A row is primary exactly when its `dedup_group`
+    /// is null or equals its own id, so no extra column is needed.
     pub dedup_group: String,
     pub primary_id: String,
     pub member_ids: Vec<String>,
@@ -104,8 +105,9 @@ pub struct Group {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Assignment {
     pub id: String,
-    /// `None` for rows that matched nothing.
+    /// `None` for rows that matched nothing; otherwise the primary's id.
     pub dedup_group: Option<String>,
+    /// Redundant with `dedup_group == id`, kept for readers that prefer a flag.
     pub is_primary: bool,
 }
 
@@ -642,14 +644,14 @@ mod tests {
     }
 
     #[test]
-    fn group_id_is_stable_and_assignments_cover_every_row() {
+    fn group_id_is_the_primary_and_assignments_cover_every_row() {
         let rs = vec![
             role("z", "Lyft", "Data Science Intern - Algorithms", "SF"),
             role("m", "Lyft", "Data Science Intern - Algorithms", "NYC"),
             role("q", "Other", "Solo Intern", "Nowhere"),
         ];
         let out = dedup(&rs, &Config::default());
-        assert_eq!(out.groups[0].dedup_group, "m", "smallest member id");
+        assert_eq!(out.groups[0].dedup_group, out.groups[0].primary_id, "group id is the primary's id");
         assert_eq!(out.assignments.len(), 3);
         let solo = out.assignments.iter().find(|a| a.id == "q").unwrap();
         assert_eq!(solo.dedup_group, None);

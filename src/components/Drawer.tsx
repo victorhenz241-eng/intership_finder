@@ -7,6 +7,7 @@ import {
   PIPELINE_STAGES,
   STAGE_LABELS,
   isPipelineStage,
+  isPrimary,
   parseMeta,
   type Role,
   type Stage,
@@ -67,7 +68,11 @@ export default function Drawer() {
 }
 
 function DrawerBody({ role, onClose }: { role: Role; onClose: () => void }) {
-  const { update } = useRoles();
+  const { update, groups, byId } = useRoles();
+  const { set } = useQueryState();
+  const members = role.dedup_group ? groups.get(role.dedup_group) ?? [] : [];
+  const others = members.filter((m) => m.id !== role.id);
+  const primary = !isPrimary(role) && role.dedup_group ? byId.get(role.dedup_group) : undefined;
   const panel = useRef<HTMLDivElement>(null);
   useEffect(() => {
     panel.current?.focus();
@@ -142,6 +147,34 @@ function DrawerBody({ role, onClose }: { role: Role; onClose: () => void }) {
           <section className="mt-6">
             <h3 className="text-xs text-ink-3">Description excerpt</h3>
             <p className="mt-1.5 whitespace-pre-line text-[13px] leading-relaxed text-ink-2">{role.description}</p>
+          </section>
+        )}
+
+        {others.length > 0 && (
+          <section className="mt-6">
+            <h3 className="text-xs text-ink-3">
+              {primary ? "This is a duplicate listing of" : `Also listed as (${others.length})`}
+            </h3>
+            <ul className="mt-1.5 divide-y divide-rule rounded-md border border-rule text-[13px]">
+              {(primary ? [primary] : others).map((m) => (
+                <li key={m.id} className="flex flex-wrap items-center gap-x-3 gap-y-0.5 px-2.5 py-1.5">
+                  <span className="min-w-0 flex-1 truncate text-ink">{m.title}</span>
+                  <span className="text-xs text-ink-3">{m.location ?? "—"}</span>
+                  <span className="text-xs text-ink-3">{m.source ?? "—"}</span>
+                  {m.url && (
+                    <a href={m.url} target="_blank" rel="noopener noreferrer" className="text-xs text-accent hover:underline">
+                      open
+                    </a>
+                  )}
+                  <button type="button" onClick={() => set({ role: m.id })} className="text-xs text-ink-2 underline-offset-2 hover:underline">
+                    view
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-1.5 text-xs text-ink-3">
+              Grouped by the dedup service. Stage changes apply to this row only; the others stay folded under the primary.
+            </p>
           </section>
         )}
 

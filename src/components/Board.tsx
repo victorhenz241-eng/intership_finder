@@ -16,7 +16,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { useRoles } from "@/lib/store";
 import { useQueryState } from "@/lib/url";
-import { PIPELINE_STAGES, STAGE_LABELS, isPipelineStage, type PipelineStage, type Role } from "@/lib/types";
+import { PIPELINE_STAGES, STAGE_LABELS, isPipelineStage, isPrimary, type PipelineStage, type Role } from "@/lib/types";
 import ScoreChip from "./ScoreChip";
 
 export default function Board() {
@@ -26,7 +26,7 @@ export default function Board() {
 
   const byStage = useMemo(() => {
     const map = Object.fromEntries(PIPELINE_STAGES.map((s) => [s, [] as Role[]])) as Record<PipelineStage, Role[]>;
-    for (const r of roles) if (isPipelineStage(r.stage)) map[r.stage].push(r);
+    for (const r of roles) if (isPipelineStage(r.stage) && isPrimary(r)) map[r.stage].push(r);
     for (const s of PIPELINE_STAGES) map[s].sort((a, b) => (b.fit_score ?? -1) - (a.fit_score ?? -1));
     return map;
   }, [roles]);

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRoles } from "@/lib/store";
 import { useQueryState } from "@/lib/url";
-import { compareForInbox, isNewToday, isUnscored } from "@/lib/types";
+import { compareForInbox, isNewToday, isPrimary, isUnscored } from "@/lib/types";
 import InboxRow from "./InboxRow";
 import ShortcutsHelp from "./ShortcutsHelp";
 
@@ -23,7 +23,7 @@ function isTypingTarget(t: EventTarget | null) {
 }
 
 export default function Inbox() {
-  const { roles, status, error, refresh, updateMany } = useRoles();
+  const { roles, groups, status, error, refresh, updateMany } = useRoles();
   const { params, set } = useQueryState();
 
   const view: "inbox" | "dismissed" = params.get("view") === "dismissed" ? "dismissed" : "inbox";
@@ -37,13 +37,27 @@ export default function Inbox() {
   const [lastChecked, setLastChecked] = useState<string | null>(null);
   const [undo, setUndo] = useState<Undo | null>(null);
   const [help, setHelp] = useState(false);
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const listRef = useRef<HTMLUListElement>(null);
   /** Set when the row shown in the drawer is dismissed/saved, so the drawer follows the cursor. */
   const followDrawer = useRef(false);
 
   const stageWanted = view === "inbox" ? "found" : "dismissed";
 
-  const pool = useMemo(() => roles.filter((r) => r.stage === stageWanted), [roles, stageWanted]);
+  const pool = useMemo(
+    () => roles.filter((r) => r.stage === stageWanted && isPrimary(r)),
+    [roles, stageWanted]
+  );
+  const hiddenDuplicates = useMemo(() => roles.filter((r) => !isPrimary(r)).length, [roles]);
+
+  const toggleExpanded = useCallback((id: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
 
   const sources = useMemo(
     () => Array.from(new Set(pool.map((r) => r.source ?? "").filter(Boolean))).sort(),
@@ -254,6 +268,12 @@ export default function Inbox() {
             undoNow();
           }
           break;
+        case "d":
+          if (cursorId && (groups.get(cursorId)?.length ?? 0) > 1) {
+            e.preventDefault();
+            toggleExpanded(cursorId);
+          }
+          break;
         case "?":
           e.preventDefault();
           setHelp(true);
@@ -266,7 +286,7 @@ export default function Inbox() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [help, moveCursor, cursorId, open, view, dismiss, restore, save, targets, toggleCheck, undo, undoNow, openId, set, checked.size]);
+  }, [help, moveCursor, cursorId, open, view, dismiss, restore, save, targets, toggleCheck, undo, undoNow, openId, set, checked.size, groups, toggleExpanded]);
 
   const one = useCallback((fn: (ids: string[]) => void) => (id: string) => fn([id]), []);
   const onDismiss = useMemo(() => one(dismiss), [one, dismiss]);
@@ -374,6 +394,7 @@ export default function Inbox() {
           {rows.length} {view === "inbox" ? "in inbox" : "dismissed"}
           {rows.length !== pool.length ? ` of ${pool.length}` : ""}
           {unscoredCount > 0 ? ` · ${unscoredCount} not scored yet` : ""}
+          {hiddenDuplicates > 0 ? ` · ${hiddenDuplicates} duplicate${hiddenDuplicates === 1 ? "" : "s"} folded` : ""}
         </span>
         <span className="hidden sm:inline">strong → decent → skip → unscored, then fit, then newest</span>
       </div>
@@ -423,6 +444,9 @@ export default function Inbox() {
               onDismiss={onDismiss}
               onSave={onSave}
               onRestore={onRestore}
+              duplicates={groups.get(r.id)?.slice(1)}
+              expanded={expanded.has(r.id)}
+              onToggleDuplicates={toggleExpanded}
             />
           ))}
         </ul>

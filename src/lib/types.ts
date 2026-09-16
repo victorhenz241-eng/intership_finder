@@ -55,6 +55,14 @@ export type Role = {
   updated_at: string | null;
 };
 
+/**
+ * The dedup service sets `dedup_group` to the primary's own id for every row
+ * in a group. A row is shown when it matched nothing or is its group's primary.
+ */
+export function isPrimary(r: Pick<Role, "id" | "dedup_group">): boolean {
+  return !r.dedup_group || r.dedup_group === r.id;
+}
+
 export function isPipelineStage(s: Stage): s is PipelineStage {
   return (PIPELINE_STAGES as readonly Stage[]).includes(s);
 }

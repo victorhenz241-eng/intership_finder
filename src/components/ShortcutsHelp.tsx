@@ -8,6 +8,7 @@ const ROWS: [string, string][] = [
   ["e", "Dismiss (or restore, in Dismissed)"],
   ["s", "Save to pipeline"],
   ["x", "Toggle checkbox on current row"],
+  ["d", "Fold / unfold duplicate listings"],
   ["u", "Undo the last dismiss"],
   ["Esc", "Close detail / clear selection"],
   ["?", "This help"],

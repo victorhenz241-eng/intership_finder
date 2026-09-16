@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useRoles } from "@/lib/store";
-import { isPipelineStage } from "@/lib/types";
+import { isPipelineStage, isPrimary } from "@/lib/types";
 import { relativeTime } from "@/lib/format";
 
 function Tab({ href, label, count, active }: { href: string; label: string; count: number; active: boolean }) {
@@ -43,6 +43,7 @@ export default function Nav() {
   let pipeline = 0;
   let strong = 0;
   for (const r of roles) {
+    if (!isPrimary(r)) continue;
     if (r.stage === "found") {
       inbox++;
       if (r.severity === "strong") strong++;
