@@ -24,13 +24,13 @@ export function RoleCardBody({ role }: { role: Role }) {
             <p className="mt-0.5 text-xs text-ink-2">{role.location}</p>
           )}
         </div>
-        <ScoreChip score={role.fit_score} severity={role.severity} />
+        <ScoreChip role={role} size="lg" />
       </div>
       {role.why && (
         <p className="mt-3 text-[13px] leading-relaxed text-ink-2">{role.why}</p>
       )}
       <div className="mt-3 flex items-center justify-between gap-3 border-t border-rule pt-2.5 text-xs">
-        <span className="text-ink-3">{SEVERITY_LABEL[role.severity]}</span>
+        <span className="text-ink-3">{SEVERITY_LABEL[role.severity ?? "skip"]}</span>
         {role.url ? (
           <a
             href={role.url}

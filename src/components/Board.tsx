@@ -62,7 +62,7 @@ export default function Board() {
       Role[]
     >;
     for (const r of roles) (map[r.stage] ?? map.found).push(r);
-    for (const s of STAGES) map[s].sort((a, b) => b.fit_score - a.fit_score);
+    for (const s of STAGES) map[s].sort((a, b) => (b.fit_score ?? 0) - (a.fit_score ?? 0));
     return map;
   }, [roles]);
 
