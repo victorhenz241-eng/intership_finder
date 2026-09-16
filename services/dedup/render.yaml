@@ -1,0 +1,13 @@
+# Render blueprint: connect the repo, pick "Blueprint", and Render builds this
+# Dockerfile. The free plan sleeps after idle; the first request of the day is slow.
+services:
+  - type: web
+    name: internship-dedup
+    runtime: docker
+    rootDir: services/dedup
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: "8080"
