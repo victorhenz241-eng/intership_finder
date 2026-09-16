@@ -38,6 +38,8 @@ export default function Inbox() {
   const [undo, setUndo] = useState<Undo | null>(null);
   const [help, setHelp] = useState(false);
   const listRef = useRef<HTMLUListElement>(null);
+  /** Set when the row shown in the drawer is dismissed/saved, so the drawer follows the cursor. */
+  const followDrawer = useRef(false);
 
   const stageWanted = view === "inbox" ? "found" : "dismissed";
 
@@ -75,10 +77,19 @@ export default function Inbox() {
     }
     if (rows.length === 0) {
       setCursorId(null);
+      if (followDrawer.current) {
+        followDrawer.current = false;
+        set({ role: null });
+      }
       return;
     }
-    setCursorId(rows[Math.min(lastIdx.current, rows.length - 1)].id);
-  }, [cursorIdx, rows]);
+    const nextId = rows[Math.min(lastIdx.current, rows.length - 1)].id;
+    setCursorId(nextId);
+    if (followDrawer.current) {
+      followDrawer.current = false;
+      set({ role: nextId });
+    }
+  }, [cursorIdx, rows, set]);
 
   // Checked rows that left the list are dropped from the selection.
   useEffect(() => {
@@ -117,20 +128,22 @@ export default function Inbox() {
     async (ids: string[]) => {
       if (ids.length === 0) return;
       setUndo({ ids, label: ids.length === 1 ? "Dismissed 1 role" : `Dismissed ${ids.length} roles` });
+      if (openId && ids.includes(openId)) followDrawer.current = true;
       setChecked(new Set());
       const err = await updateMany(ids, { stage: "dismissed" });
       if (err) setUndo(null);
     },
-    [updateMany]
+    [updateMany, openId]
   );
 
   const save = useCallback(
     async (ids: string[]) => {
       if (ids.length === 0) return;
+      if (openId && ids.includes(openId)) followDrawer.current = true;
       setChecked(new Set());
       await updateMany(ids, { stage: "interested" });
     },
-    [updateMany]
+    [updateMany, openId]
   );
 
   const restore = useCallback(
@@ -146,8 +159,10 @@ export default function Inbox() {
     if (!undo) return;
     const ids = undo.ids;
     setUndo(null);
+    setCursorId(ids[0]);
     await updateMany(ids, { stage: "found" });
-  }, [undo, updateMany]);
+    scrollCursorIntoView(ids[0]);
+  }, [undo, updateMany, scrollCursorIntoView]);
 
   useEffect(() => {
     if (!undo) return;
@@ -263,7 +278,7 @@ export default function Inbox() {
   return (
     <main className="mx-auto w-full max-w-[120rem] flex-1 px-4 pb-24 sm:px-6">
       <div className="sticky top-14 z-20 -mx-4 border-b border-rule bg-page/95 px-4 backdrop-blur sm:-mx-6 sm:px-6">
-        <div className="flex h-11 flex-wrap items-center gap-2 py-1.5 sm:flex-nowrap">
+        <div className="flex min-h-11 flex-wrap items-center gap-2 py-1.5 sm:flex-nowrap">
           <div role="tablist" aria-label="Filter" className="flex items-center gap-0.5 rounded-md bg-[#e3e6eb] p-0.5">
             {SEGMENTS.map((s) => (
               <button
@@ -330,10 +345,8 @@ export default function Inbox() {
             </button>
           </div>
         </div>
-      </div>
-
       {checked.size > 0 && (
-        <div className="sticky top-[6.25rem] z-20 -mx-4 flex items-center gap-2 border-b border-rule bg-[#e6ebf9] px-4 py-1.5 text-xs text-ink sm:-mx-6 sm:px-6">
+        <div className="-mx-4 flex flex-wrap items-center gap-2 border-t border-rule bg-[#e6ebf9] px-4 py-1.5 text-xs text-ink sm:-mx-6 sm:px-6">
           <span className="tabular-nums">{checked.size} selected</span>
           {view === "inbox" ? (
             <>
@@ -354,6 +367,7 @@ export default function Inbox() {
           </button>
         </div>
       )}
+      </div>
 
       <div className="flex items-center justify-between py-1.5 text-xs text-ink-3">
         <span className="tabular-nums">
