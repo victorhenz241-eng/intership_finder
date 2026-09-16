@@ -5,6 +5,7 @@ import "./globals.css";
 import { RolesProvider } from "@/lib/store";
 import Nav from "@/components/Nav";
 import Notice from "@/components/Notice";
+import Drawer from "@/components/Drawer";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
 const fraunces = Fraunces({
@@ -30,6 +31,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             </Suspense>
             <Notice />
             <Suspense>{children}</Suspense>
+            <Suspense>
+              <Drawer />
+            </Suspense>
           </div>
         </RolesProvider>
       </body>
