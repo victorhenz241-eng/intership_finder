@@ -76,6 +76,18 @@ create policy "roles stage and notes are updatable"
   with check (true);
 ```
 
+## Duplicate folding
+
+A Rust service in [services/dedup](services/dedup/README.md) groups rows that
+describe the same job (same company, same or near-identical title, compatible
+location, or the same posting URL). It sets `dedup_group` on every member to
+the primary's id. The app shows a row when `dedup_group` is null or equals
+its own id, folds the rest behind a "+N" badge (press `d` or click it), and
+lists them under "Also listed as" in the drawer. No extra column is needed.
+
+The n8n workflow "Internship Radar — Dedup (Rust)" re-runs the grouping every
+six hours once the service URL is set on its "POST /dedup" node.
+
 ## Data notes
 
 - Rows with `fit_score = 0` and an empty `why` are treated as **unscored**. They
@@ -88,7 +100,7 @@ create policy "roles stage and notes are updatable"
 
 ## Deploy to Vercel
 
-1. Push this repository to GitHub, GitLab, or Bitbucket.
+1. The repository lives at github.com/victorhenz241-eng/intership_finder (private).
 2. In Vercel: **Add New → Project**, import the repository (Next.js is auto-detected).
 3. Add both environment variables from `.env.local.example`.
 4. Deploy. Pushes to the default branch redeploy automatically.
@@ -101,3 +113,10 @@ vercel env add NEXT_PUBLIC_SUPABASE_URL
 vercel env add NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
 vercel --prod
 ```
+
+## Deploy the dedup service on Render
+
+In Render: **New → Blueprint**, pick the same GitHub repository. Render reads
+`services/dedup/render.yaml`, builds the Dockerfile, and gives you a URL like
+`https://internship-dedup.onrender.com`. Paste `<that URL>/dedup` into the
+"POST /dedup" node of the n8n workflow and run it once with "Run Now".
