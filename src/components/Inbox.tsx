@@ -277,7 +277,7 @@ export default function Inbox() {
 
   return (
     <main className="mx-auto w-full max-w-[120rem] flex-1 px-4 pb-24 sm:px-6">
-      <div className="sticky top-14 z-20 -mx-4 border-b border-rule bg-page/95 px-4 backdrop-blur sm:-mx-6 sm:px-6">
+      <div className="sticky top-14 z-20 -mx-4 border-b border-rule bg-page px-4 sm:-mx-6 sm:px-6">
         <div className="flex min-h-11 flex-wrap items-center gap-2 py-1.5 sm:flex-nowrap">
           <div role="tablist" aria-label="Filter" className="flex items-center gap-0.5 rounded-md bg-[#e3e6eb] p-0.5">
             {SEGMENTS.map((s) => (

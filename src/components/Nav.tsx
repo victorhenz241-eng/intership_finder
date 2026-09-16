@@ -50,7 +50,7 @@ export default function Nav() {
   }
 
   return (
-    <nav className="sticky top-0 z-30 border-b border-rule bg-page/95 backdrop-blur">
+    <nav className="sticky top-0 z-30 border-b border-rule bg-page">
       <div className="mx-auto flex min-h-14 max-w-[120rem] flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2 sm:flex-nowrap sm:py-0 sm:px-6">
         <Link href="/inbox" className="mr-2 whitespace-nowrap font-display text-xl font-medium tracking-tight text-ink">
           Internship Radar
