@@ -107,9 +107,17 @@ the app treats that as normal and never hides or marks them.
 
 ## Data notes
 
-- Rows with `fit_score = 0` and an empty `why` are treated as **unscored**. They
-  show a dashed "–" chip, sort below scored skips, and are never included in
-  "Select N skips". Fix the scorer upstream rather than dismissing them blind.
+- A row is **unscored** when it has no score **and** no reasoning: `fit_score`
+  is NULL or 0 and `why` is NULL or empty. n8n writes all three as NULL when a
+  scoring call fails or returns nothing (older rows carry `0 / skip / ""` from
+  before that fix; the "Backfill Scores" workflow re-scores both shapes). A real
+  0 always comes with a `why` and is a genuine skip. Unscored rows show a dashed
+  "–" chip, sort below scored skips, are never included in "Select N skips", and
+  are counted in "N not scored yet". Fix the scorer upstream rather than
+  dismissing them blind.
+- `eligibility_checked_at` is stamped by the enrichment workflow on every pass
+  so its queue drains. The app reads it only as part of the row; it never
+  displays or writes it.
 - `description` is parsed as `Category: … Terms: … Sponsorship: … Degrees: …` when
   it has that shape (the simplify source). Otherwise it is shown as a text excerpt.
 - The app loads every row once and filters client-side. Use the Refresh button
