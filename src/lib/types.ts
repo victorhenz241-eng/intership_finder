@@ -55,6 +55,8 @@ export type Role = {
   eligibility_reason: string | null;
   /** Fetched job description (full or excerpt). Third-party text: render as text only. */
   jd_text: string | null;
+  /** Stamped by the enrichment workflow on every pass (drains its queue). Read-only here; the app never writes it. */
+  eligibility_checked_at: string | null;
   stage: Stage;
   draft_message: string | null;
   notes: string | null;
@@ -81,7 +83,11 @@ export function isPipelineStage(s: Stage): s is PipelineStage {
   return (PIPELINE_STAGES as readonly Stage[]).includes(s);
 }
 
-/** A row the scorer never evaluated: no score and no reasoning. */
+/**
+ * A row the scorer never evaluated: no score and no reasoning.
+ * n8n writes NULL fit_score/severity/why on a failed scoring call; older rows
+ * carry 0/skip/"". Both are unscored. A real 0 always comes with a `why`.
+ */
 export function isUnscored(r: Pick<Role, "fit_score" | "why">): boolean {
   return !r.fit_score && !(r.why && r.why.trim());
 }
