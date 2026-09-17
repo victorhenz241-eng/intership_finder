@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRoles } from "@/lib/store";
 import { useQueryState } from "@/lib/url";
-import { compareForInbox, isNewToday, isPrimary, isUnscored } from "@/lib/types";
+import { compareForInbox, isLikelyIneligible, isNewToday, isPrimary, isUnscored } from "@/lib/types";
 import InboxRow from "./InboxRow";
 import ShortcutsHelp from "./ShortcutsHelp";
 
@@ -30,6 +30,8 @@ export default function Inbox() {
   const segment = (params.get("f") as Segment) || "all";
   const query = params.get("q") ?? "";
   const source = params.get("s") ?? "";
+  /** "Show ineligible" toggle. Off by default; only ever hides an explicit likely_ineligible verdict. */
+  const showIneligible = params.get("inel") === "1";
   const openId = params.get("role");
 
   const [cursorId, setCursorId] = useState<string | null>(null);
@@ -64,10 +66,14 @@ export default function Inbox() {
     [pool]
   );
 
+  // Ineligible rows are hidden in the inbox only; the dismissed view shows everything so recovery is never hampered.
+  const hideIneligible = view === "inbox" && !showIneligible;
+
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
     const now = Date.now();
     const out = pool.filter((r) => {
+      if (hideIneligible && isLikelyIneligible(r)) return false;
       if (segment === "strong" && r.severity !== "strong") return false;
       if (segment === "decent" && r.severity !== "decent") return false;
       if (segment === "new" && !isNewToday(r, now)) return false;
@@ -77,7 +83,7 @@ export default function Inbox() {
     });
     out.sort(compareForInbox);
     return out;
-  }, [pool, segment, source, query]);
+  }, [pool, segment, source, query, hideIneligible]);
 
   const rowIndex = useMemo(() => new Map(rows.map((r, i) => [r.id, i])), [rows]);
   const cursorIdx = cursorId ? rowIndex.get(cursorId) ?? -1 : -1;
@@ -213,6 +219,14 @@ export default function Inbox() {
     [rows]
   );
 
+  /** Likely-ineligible rows in the current view (only non-empty when they are shown). */
+  const ineligibleIds = useMemo(() => rows.filter(isLikelyIneligible).map((r) => r.id), [rows]);
+  /** How many the default filter is holding back, so the count line can say so. */
+  const ineligibleHidden = useMemo(
+    () => (hideIneligible ? pool.filter(isLikelyIneligible).length : 0),
+    [pool, hideIneligible]
+  );
+
   /** Targets for a keyboard action: the checked rows if any, else the cursor row. */
   const targets = useCallback(() => {
     if (checked.size > 0) return Array.from(checked);
@@ -336,6 +350,27 @@ export default function Inbox() {
             ))}
           </select>
           <div className="ml-auto flex items-center gap-2">
+            {view === "inbox" && (
+              <label className="flex h-7 cursor-pointer select-none items-center gap-1.5 text-xs text-ink-2 hover:text-ink">
+                <input
+                  type="checkbox"
+                  checked={showIneligible}
+                  onChange={(e) => set({ inel: e.target.checked ? "1" : null })}
+                  className="h-3.5 w-3.5 accent-accent"
+                />
+                Show ineligible
+              </label>
+            )}
+            {view === "inbox" && showIneligible && ineligibleIds.length > 0 && checked.size === 0 && (
+              <button
+                type="button"
+                onClick={() => dismiss(ineligibleIds)}
+                className="h-7 rounded-md border border-rule-2 bg-card px-2 text-xs text-ink hover:bg-[#f6f7f9]"
+                title="Dismiss every likely-ineligible row in view. Recoverable from Dismissed; undo with u."
+              >
+                Dismiss {ineligibleIds.length} ineligible
+              </button>
+            )}
             {view === "inbox" && skipIds.length > 0 && checked.size === 0 && (
               <button
                 type="button"
@@ -394,6 +429,7 @@ export default function Inbox() {
           {rows.length} {view === "inbox" ? "in inbox" : "dismissed"}
           {rows.length !== pool.length ? ` of ${pool.length}` : ""}
           {unscoredCount > 0 ? ` · ${unscoredCount} not scored yet` : ""}
+          {ineligibleHidden > 0 ? ` · ${ineligibleHidden} ineligible hidden` : ""}
           {hiddenDuplicates > 0 ? ` · ${hiddenDuplicates} duplicate${hiddenDuplicates === 1 ? "" : "s"} folded` : ""}
         </span>
         <span className="hidden sm:inline">strong → decent → skip → unscored, then fit, then newest</span>
@@ -447,6 +483,7 @@ export default function Inbox() {
               duplicates={groups.get(r.id)?.slice(1)}
               expanded={expanded.has(r.id)}
               onToggleDuplicates={toggleExpanded}
+              dimmed={view === "inbox" && isLikelyIneligible(r)}
             />
           ))}
         </ul>
