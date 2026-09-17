@@ -11,6 +11,8 @@ export const STAGES = [
 
 export type Stage = (typeof STAGES)[number];
 export type Severity = "strong" | "decent" | "skip";
+/** Written by the n8n enrichment workflow. Most rows sit at `unknown` for a long time. */
+export type Eligibility = "eligible" | "likely_ineligible" | "unknown";
 
 export const PIPELINE_STAGES = [
   "interested",
@@ -49,6 +51,10 @@ export type Role = {
   severity: Severity | null;
   why: string | null;
   dedup_group: string | null;
+  eligibility: Eligibility | null;
+  eligibility_reason: string | null;
+  /** Fetched job description (full or excerpt). Third-party text: render as text only. */
+  jd_text: string | null;
   stage: Stage;
   draft_message: string | null;
   notes: string | null;
@@ -61,6 +67,14 @@ export type Role = {
  */
 export function isPrimary(r: Pick<Role, "id" | "dedup_group">): boolean {
   return !r.dedup_group || r.dedup_group === r.id;
+}
+
+/**
+ * Only an explicit verdict counts. `unknown`, null and anything unexpected are
+ * treated as visible: a role is never hidden because enrichment hasn't reached it.
+ */
+export function isLikelyIneligible(r: Pick<Role, "eligibility">): boolean {
+  return r.eligibility === "likely_ineligible";
 }
 
 export function isPipelineStage(s: Stage): s is PipelineStage {
