@@ -6,6 +6,7 @@ import { useQueryState } from "@/lib/url";
 import {
   PIPELINE_STAGES,
   STAGE_LABELS,
+  isLikelyIneligible,
   isPipelineStage,
   isPrimary,
   parseMeta,
@@ -105,6 +106,8 @@ function DrawerBody({ role, onClose }: { role: Role; onClose: () => void }) {
           <ScoreChip role={role} size="lg" />
         </header>
 
+        <EligibilityLine role={role} />
+
         <StageControls role={role} nextStage={nextStage} inPipeline={inPipeline} />
 
         {role.url ? (
@@ -143,11 +146,22 @@ function DrawerBody({ role, onClose }: { role: Role; onClose: () => void }) {
           )}
         </section>
 
-        {!meta && role.description && (
+        {role.jd_text && role.jd_text.trim() ? (
           <section className="mt-6">
-            <h3 className="text-xs text-ink-3">Description excerpt</h3>
-            <p className="mt-1.5 whitespace-pre-line text-[13px] leading-relaxed text-ink-2">{role.description}</p>
+            <h3 className="text-xs text-ink-3">Job description</h3>
+            {/* Third-party text. Rendered as a text node only: never HTML or markdown. */}
+            <div className="mt-1.5 max-h-[24rem] overflow-y-auto rounded-md border border-rule bg-page px-3 py-2">
+              <p className="whitespace-pre-line text-[13px] leading-relaxed text-ink-2">{role.jd_text.trim()}</p>
+            </div>
           </section>
+        ) : (
+          !meta &&
+          role.description && (
+            <section className="mt-6">
+              <h3 className="text-xs text-ink-3">Description excerpt</h3>
+              <p className="mt-1.5 whitespace-pre-line text-[13px] leading-relaxed text-ink-2">{role.description}</p>
+            </section>
+          )
         )}
 
         {others.length > 0 && (
@@ -187,6 +201,23 @@ function DrawerBody({ role, onClose }: { role: Role; onClose: () => void }) {
       </div>
     </div>
   );
+}
+
+/** Verdict from the enrichment workflow. Unknown renders nothing: it is the normal state, not a problem. */
+function EligibilityLine({ role }: { role: Role }) {
+  if (isLikelyIneligible(role)) {
+    return (
+      <p className="mt-3 rounded-md bg-[var(--decent-bg)] px-3 py-2 text-sm text-[var(--decent)]">
+        <span className="font-medium">Likely ineligible</span>
+        {" — "}
+        {role.eligibility_reason?.trim() || "no reason recorded"}
+      </p>
+    );
+  }
+  if (role.eligibility === "eligible") {
+    return <p className="mt-3 text-xs text-ink-3">Eligibility checked: no disqualifiers found.</p>;
+  }
+  return null;
 }
 
 function Meta({ k, v }: { k: string; v: string | null | undefined }) {
