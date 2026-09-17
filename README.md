@@ -88,6 +88,23 @@ lists them under "Also listed as" in the drawer. No extra column is needed.
 The n8n workflow "Internship Radar — Dedup (Rust)" re-runs the grouping every
 six hours once the service URL is set on its "POST /dedup" node.
 
+## Eligibility
+
+An n8n enrichment workflow fetches the real job description where the ATS
+returns text and writes `eligibility` (`eligible` | `likely_ineligible` |
+`unknown`, default `unknown`), `eligibility_reason` and `jd_text` per role. It
+processes a dozen roles per run, so most rows stay `unknown` for a long time;
+the app treats that as normal and never hides or marks them.
+
+- `likely_ineligible` rows get an amber **Check** pill and are hidden from the
+  inbox by default. "Show ineligible" (`?inel=1`) reveals them greyed with the
+  reason; "Dismiss N ineligible" then sets `stage = 'dismissed'` through the
+  usual undoable path. The Dismissed view is never filtered.
+- The drawer shows the verdict under the title and, when `jd_text` is present,
+  a scrollable "Job description" block rendered as plain text only. The text is
+  third-party and untrusted; it is never interpreted as HTML or markdown.
+- Hiding is a view filter. Nothing about eligibility is ever written by the app.
+
 ## Data notes
 
 - Rows with `fit_score = 0` and an empty `why` are treated as **unscored**. They
