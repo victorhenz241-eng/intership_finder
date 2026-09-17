@@ -125,7 +125,7 @@ function InboxRowImpl({ role, view, cursor, checked, onCheck, onOpen, onDismiss,
           {duplicates!.map((d) => (
             <li key={d.id} className="flex flex-wrap items-center gap-x-3 gap-y-0.5 py-0.5">
               <span className="truncate">{d.title}</span>
-              <EligibilityMark role={d} />
+              {/* No eligibility mark here: enrichment grades primaries only, so a duplicate's verdict is never set. */}
               <span className="text-ink-3">{d.location ?? "—"}</span>
               <span className="text-ink-3">{d.source ?? "—"}</span>
               <span className="text-ink-3">{d.stage !== "found" ? d.stage : ""}</span>
