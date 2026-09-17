@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRoles } from "@/lib/store";
 import { useQueryState } from "@/lib/url";
-import { compareForInbox, isLikelyIneligible, isNewToday, isPrimary, isUnscored } from "@/lib/types";
+import { compareForInbox, describeReasonKinds, isLikelyIneligible, isNewToday, isPrimary, isUnscored } from "@/lib/types";
 import InboxRow from "./InboxRow";
 import ShortcutsHelp from "./ShortcutsHelp";
 
@@ -220,12 +220,12 @@ export default function Inbox() {
   );
 
   /** Likely-ineligible rows in the current view (only non-empty when they are shown). */
-  const ineligibleIds = useMemo(() => rows.filter(isLikelyIneligible).map((r) => r.id), [rows]);
-  /** How many the default filter is holding back, so the count line can say so. */
-  const ineligibleHidden = useMemo(
-    () => (hideIneligible ? pool.filter(isLikelyIneligible).length : 0),
-    [pool, hideIneligible]
-  );
+  const ineligibleInView = useMemo(() => rows.filter(isLikelyIneligible), [rows]);
+  const ineligibleIds = useMemo(() => ineligibleInView.map((r) => r.id), [ineligibleInView]);
+  /** What the default filter is holding back, with a why-breakdown so over-reach is visible. */
+  const ineligibleHidden = useMemo(() => (hideIneligible ? pool.filter(isLikelyIneligible) : []), [pool, hideIneligible]);
+  const hiddenBreakdown = useMemo(() => describeReasonKinds(ineligibleHidden), [ineligibleHidden]);
+  const inViewBreakdown = useMemo(() => describeReasonKinds(ineligibleInView), [ineligibleInView]);
 
   /** Targets for a keyboard action: the checked rows if any, else the cursor row. */
   const targets = useCallback(() => {
@@ -366,7 +366,7 @@ export default function Inbox() {
                 type="button"
                 onClick={() => dismiss(ineligibleIds)}
                 className="h-7 rounded-md border border-rule-2 bg-card px-2 text-xs text-ink hover:bg-[#f6f7f9]"
-                title="Dismiss every likely-ineligible row in view. Recoverable from Dismissed; undo with u."
+                title={`Dismiss every likely-ineligible row in view${inViewBreakdown ? ` (${inViewBreakdown})` : ""}. Recoverable from Dismissed; undo with u.`}
               >
                 Dismiss {ineligibleIds.length} ineligible
               </button>
@@ -429,7 +429,9 @@ export default function Inbox() {
           {rows.length} {view === "inbox" ? "in inbox" : "dismissed"}
           {rows.length !== pool.length ? ` of ${pool.length}` : ""}
           {unscoredCount > 0 ? ` · ${unscoredCount} not scored yet` : ""}
-          {ineligibleHidden > 0 ? ` · ${ineligibleHidden} ineligible hidden` : ""}
+          {ineligibleHidden.length > 0
+            ? ` · ${ineligibleHidden.length} ineligible hidden${hiddenBreakdown ? ` — ${hiddenBreakdown}` : ""}`
+            : ""}
           {hiddenDuplicates > 0 ? ` · ${hiddenDuplicates} duplicate${hiddenDuplicates === 1 ? "" : "s"} folded` : ""}
         </span>
         <span className="hidden sm:inline">strong → decent → skip → unscored, then fit, then newest</span>

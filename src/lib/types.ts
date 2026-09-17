@@ -79,6 +79,38 @@ export function isLikelyIneligible(r: Pick<Role, "eligibility">): boolean {
   return r.eligibility === "likely_ineligible";
 }
 
+export type ReasonKind = "degree" | "skills" | "visa" | "other";
+export const REASON_KIND_ORDER: readonly ReasonKind[] = ["degree", "skills", "visa", "other"];
+
+const VISA_RE = /\b(j-?1|f-?1|visa|citizen|citizenship|clearance|us person|permanent resident|green card|work authori[sz]ation|sponsor)/i;
+const DEGREE_RE = /\b(master|phd|ph\.d|doctorate|doctoral|bachelor|degree|graduate|undergrad|m\.?s\.?c?\b)/i;
+const SKILLS_RE = /(c\+\+|\bc#|\bjava\b|\bgo(lang)?\b|\bscala\b|\bkotlin\b|\bruby\b|\bphp\b|\bswift\b|\bmatlab\b|\brust\b|language|fluen|proficien|experience (with|in)|\bskill|years of)/i;
+
+/**
+ * Coarse bucket for an eligibility_reason so the hidden count can say why.
+ * The text is model-written prose, so this is deliberately forgiving:
+ * visa first (a J-1 line rarely mentions a degree), then degree (the less
+ * recoverable of the two when both appear), then skills, else "other".
+ * Never throws on unexpected input.
+ */
+export function reasonKind(reason: unknown): ReasonKind {
+  const t = typeof reason === "string" ? reason : reason == null ? "" : String(reason);
+  if (!t.trim()) return "other";
+  if (VISA_RE.test(t)) return "visa";
+  if (DEGREE_RE.test(t)) return "degree";
+  if (SKILLS_RE.test(t)) return "skills";
+  return "other";
+}
+
+/** "15 degree, 2 visa" — zero buckets omitted; empty string when nothing is counted. */
+export function describeReasonKinds(rows: Pick<Role, "eligibility_reason">[]): string {
+  const counts: Record<ReasonKind, number> = { degree: 0, skills: 0, visa: 0, other: 0 };
+  for (const r of rows) counts[reasonKind(r.eligibility_reason)]++;
+  return REASON_KIND_ORDER.filter((k) => counts[k] > 0)
+    .map((k) => `${counts[k]} ${k}`)
+    .join(", ");
+}
+
 export function isPipelineStage(s: Stage): s is PipelineStage {
   return (PIPELINE_STAGES as readonly Stage[]).includes(s);
 }
