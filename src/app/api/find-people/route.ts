@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { DAILY_LIMITS, withinQuota } from "@/lib/quota";
 import { searchPeople, toHooks } from "@/lib/people";
 import type { Role } from "@/lib/types";
 
@@ -35,6 +36,10 @@ export async function POST(req: Request) {
 
   const apiKey = process.env.SERPER_API_KEY;
   if (!apiKey) return NextResponse.json({ error: "SERPER_API_KEY is not set on the server." }, { status: 500 });
+
+  if (!(await withinQuota(supabase, "find_people"))) {
+    return NextResponse.json({ error: `Daily limit reached (${DAILY_LIMITS.find_people} per day). Try again tomorrow.` }, { status: 429 });
+  }
 
   let body: { roleId?: unknown };
   try {

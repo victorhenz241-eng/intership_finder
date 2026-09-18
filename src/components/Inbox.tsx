@@ -29,6 +29,15 @@ export default function Inbox() {
   const view: "inbox" | "dismissed" = params.get("view") === "dismissed" ? "dismissed" : "inbox";
   const segment = (params.get("f") as Segment) || "all";
   const query = params.get("q") ?? "";
+  // The search box keeps its own text and syncs the URL after a pause: a router
+  // navigation per keystroke is fine at 250 rows and laggy at 2,000.
+  const [queryDraft, setQueryDraft] = useState(query);
+  const [queryDraftBase, setQueryDraftBase] = useState(query);
+  if (query !== queryDraftBase) {
+    setQueryDraftBase(query);
+    setQueryDraft(query);
+  }
+  const queryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const source = params.get("s") ?? "";
   /** "Show ineligible" toggle. Off by default; only ever hides an explicit likely_ineligible verdict. */
   const showIneligible = params.get("inel") === "1";
@@ -327,8 +336,13 @@ export default function Inbox() {
           </div>
           <input
             type="search"
-            value={query}
-            onChange={(e) => set({ q: e.target.value })}
+            value={queryDraft}
+            onChange={(e) => {
+              const v = e.target.value;
+              setQueryDraft(v);
+              if (queryTimer.current) clearTimeout(queryTimer.current);
+              queryTimer.current = setTimeout(() => set({ q: v }), 250);
+            }}
             placeholder="Search company or title"
             aria-label="Search company or title"
             className="h-7 w-full min-w-[10rem] rounded-md border border-rule-2 bg-card px-2 text-xs text-ink placeholder:text-ink-3 sm:w-56"
@@ -466,7 +480,7 @@ export default function Inbox() {
       )}
 
       {status === "ready" && rows.length > 0 && (
-        <ul ref={listRef} role="listbox" aria-label={view === "inbox" ? "Inbox" : "Dismissed roles"} className="rounded-lg border border-rule bg-card">
+        <ul ref={listRef} aria-label={view === "inbox" ? "Inbox" : "Dismissed roles"} className="rounded-lg border border-rule bg-card">
           {rows.map((r) => (
             <InboxRow
               key={r.id}

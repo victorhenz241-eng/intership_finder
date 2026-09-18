@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { useRoles } from "@/lib/store";
 import { useQueryState } from "@/lib/url";
-import { FOLLOW_UP_DAYS, isAwaitingReply, needsFollowUp, CONTACT_STATUS_LABELS, type Contact } from "@/lib/types";
+import { FOLLOW_UP_DAYS, isAwaitingReply, lastOutbound, needsFollowUp, CONTACT_STATUS_LABELS, type Contact } from "@/lib/types";
 import { relativeTime } from "@/lib/format";
 
 /** Threads that need a nudge, oldest first, then everything else still awaiting a reply. */
@@ -12,7 +12,7 @@ export default function FollowUps() {
   const { set } = useQueryState();
 
   const { due, waiting } = useMemo(() => {
-    const bySent = (a: Contact, b: Contact) => (a.sent_at ?? a.updated_at).localeCompare(b.sent_at ?? b.updated_at);
+    const bySent = (a: Contact, b: Contact) => lastOutbound(a).localeCompare(lastOutbound(b));
     const due = contacts.filter((c) => needsFollowUp(c)).sort(bySent);
     const waiting = contacts.filter((c) => isAwaitingReply(c) && !needsFollowUp(c)).sort(bySent);
     return { due, waiting };
@@ -33,7 +33,7 @@ export default function FollowUps() {
       <section>
         <h1 className="font-display text-xl text-ink">Needs follow-up</h1>
         <p className="mt-0.5 text-xs text-ink-3">
-          Messaged more than {FOLLOW_UP_DAYS} days ago with no reply. Open the role, write the nudge yourself, then update the thread.
+          A request or message older than {FOLLOW_UP_DAYS} days with no reply. Write the nudge yourself, then update the thread.
         </p>
         <List items={due} empty={status === "ready" ? "Nothing overdue." : "Loading…"} onOpen={(id) => set({ role: id })} byId={byId} />
       </section>
@@ -78,7 +78,9 @@ function List({
                 <span className="block truncate text-xs text-ink-3">{role ? `${role.company} — ${role.title}` : "Role not loaded"}</span>
               </span>
               <span className="text-xs text-ink-2">{CONTACT_STATUS_LABELS[c.status]}</span>
-              <span className="text-xs tabular-nums text-ink-3">{c.sent_at ? `sent ${relativeTime(c.sent_at)} ago` : `updated ${relativeTime(c.updated_at)} ago`}</span>
+              <span className="text-xs tabular-nums text-ink-3">
+                {c.sent_at ? `sent ${relativeTime(c.sent_at)} ago` : c.requested_at ? `requested ${relativeTime(c.requested_at)} ago` : `updated ${relativeTime(c.updated_at)} ago`}
+              </span>
             </button>
           </li>
         );

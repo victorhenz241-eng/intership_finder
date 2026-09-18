@@ -14,7 +14,12 @@ import { getSupabase } from "./supabase";
 import type { Contact, Role } from "./types";
 
 type Status = "loading" | "ready" | "error";
-type Patch = Partial<Pick<Role, "stage" | "notes">>;
+type Patch = Partial<Pick<Role, "stage" | "notes" | "stage_changed_at">>;
+
+/** Postgres "column does not exist": the audit migration has not been run yet. */
+function isMissingColumn(message: string) {
+  return /column .* does not exist|42703|PGRST204/i.test(message);
+}
 export type ContactPatch = Partial<Omit<Contact, "id" | "role_id" | "created_at" | "updated_at">>;
 export type NewContact = Pick<Contact, "role_id" | "name"> & Partial<Pick<Contact, "title" | "profile_url" | "source" | "hook">>;
 
@@ -120,15 +125,21 @@ export function RolesProvider({ children }: { children: ReactNode }) {
     return () => clearTimeout(t);
   }, [notice]);
 
-  const updateMany = useCallback(async (ids: string[], patch: Patch) => {
+  const updateMany = useCallback(async (ids: string[], userPatch: Patch) => {
     if (ids.length === 0) return null;
+    // Every stage change is timestamped so the board can say "applied 9d ago".
+    const patch: Patch = "stage" in userPatch ? { ...userPatch, stage_changed_at: new Date().toISOString() } : userPatch;
     const idSet = new Set(ids);
     let previous: Role[] = [];
     setRoles((rs) => {
       previous = rs;
       return rs.map((r) => (idSet.has(r.id) ? { ...r, ...patch } : r));
     });
-    const { error } = await getSupabase().from("roles").update(patch).in("id", ids);
+    let { error } = await getSupabase().from("roles").update(patch).in("id", ids);
+    if (error && isMissingColumn(error.message) && "stage_changed_at" in patch) {
+      // Migration not run yet: save without the timestamp rather than lose the stage change.
+      ({ error } = await getSupabase().from("roles").update(userPatch).in("id", ids));
+    }
     if (!error) return null;
     // Revert only the fields we touched, keeping any later edits to other rows.
     setRoles((rs) =>
@@ -174,7 +185,12 @@ export function RolesProvider({ children }: { children: ReactNode }) {
         return { ...c, ...patch };
       })
     );
-    const { error } = await getSupabase().from("contacts").update(patch).eq("id", id);
+    let { error } = await getSupabase().from("contacts").update(patch).eq("id", id);
+    if (error && isMissingColumn(error.message) && "requested_at" in patch) {
+      const { requested_at: _skip, ...rest } = patch;
+      void _skip;
+      ({ error } = await getSupabase().from("contacts").update(rest).eq("id", id));
+    }
     if (!error) return null;
     setContacts((cs) => cs.map((c) => (c.id === id && before ? { ...c, ...pickContact(before, patch) } : c)));
     const msg = `Couldn't save contact: ${error.message}`;
@@ -229,6 +245,7 @@ function pick(from: Role, patch: Patch): Patch {
   const out: Patch = {};
   if ("stage" in patch) out.stage = from.stage;
   if ("notes" in patch) out.notes = from.notes;
+  if ("stage_changed_at" in patch) out.stage_changed_at = from.stage_changed_at;
   return out;
 }
 

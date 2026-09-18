@@ -63,6 +63,8 @@ export type Role = {
   draft_message: string | null;
   notes: string | null;
   updated_at: string | null;
+  /** Set by the app on every stage change. Null for rows never moved (or before the column existed). */
+  stage_changed_at: string | null;
   /**
    * Suggested talking points, written by n8n from third-party web pages. Null for
    * most rows and that is normal. Untrusted: render as text only, never HTML.
@@ -95,6 +97,9 @@ export type Contact = {
   draft_note: string | null;
   draft_message: string | null;
   status: ContactStatus;
+  /** Connection request sent. */
+  requested_at: string | null;
+  /** Message sent after they accepted. */
   sent_at: string | null;
   replied_at: string | null;
   notes: string | null;
@@ -105,7 +110,7 @@ export type Contact = {
 /** LinkedIn rejects connection notes longer than this. Enforced in code wherever a note is produced. */
 export const NOTE_MAX_CHARS = 300;
 
-/** A `messaged` thread with no reply after this many days needs a nudge. */
+/** A `messaged` thread (or a pending request) with no reply after this many days needs a nudge. */
 export const FOLLOW_UP_DAYS = 7;
 
 export function nextContactStatus(s: ContactStatus): ContactStatus | null {
@@ -114,9 +119,16 @@ export function nextContactStatus(s: ContactStatus): ContactStatus | null {
   return next && next !== "dead" ? next : null;
 }
 
-export function needsFollowUp(c: Pick<Contact, "status" | "sent_at" | "replied_at">, now = Date.now()): boolean {
-  if (c.status !== "messaged" || !c.sent_at || c.replied_at) return false;
-  return now - new Date(c.sent_at).getTime() > FOLLOW_UP_DAYS * 24 * 60 * 60 * 1000;
+export function needsFollowUp(c: Pick<Contact, "status" | "requested_at" | "sent_at" | "replied_at">, now = Date.now()): boolean {
+  if (c.replied_at) return false;
+  const since = c.status === "messaged" ? c.sent_at : c.status === "requested" ? c.requested_at : null;
+  if (!since) return false;
+  return now - new Date(since).getTime() > FOLLOW_UP_DAYS * 24 * 60 * 60 * 1000;
+}
+
+/** The moment the thread last went quiet on our side, for ordering follow-ups. */
+export function lastOutbound(c: Pick<Contact, "sent_at" | "requested_at" | "updated_at">): string {
+  return c.sent_at ?? c.requested_at ?? c.updated_at;
 }
 
 /** A thread the user is waiting on: request or message out, nothing back yet. */

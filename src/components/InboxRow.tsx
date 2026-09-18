@@ -33,12 +33,11 @@ function InboxRowImpl({ role, view, cursor, checked, onCheck, onOpen, onDismiss,
   return (
     <li
       data-row-id={role.id}
-      role="option"
-      aria-selected={cursor}
+      aria-current={cursor ? "true" : undefined}
       onClick={() => onOpen(role.id)}
       className={`group grid cursor-pointer grid-cols-[1.5rem_minmax(0,1fr)] items-center gap-x-2 border-b border-rule px-2 py-2 text-[13px] sm:min-h-[34px] sm:grid-cols-[1.5rem_2.75rem_minmax(0,1fr)_10rem_5rem_3rem_auto] sm:py-0 ${
         cursor ? "bg-[#e6ebf9] ring-1 ring-inset ring-[#b9c5ee]" : checked ? "bg-[#eef0f5]" : "bg-card hover:bg-[#f6f7f9]"
-      } ${dimmed ? "opacity-60 hover:opacity-100 aria-selected:opacity-100" : ""}`}
+      } ${dimmed ? "opacity-60 hover:opacity-100 aria-[current=true]:opacity-100" : ""}`}
     >
       <input
         type="checkbox"
@@ -90,7 +89,7 @@ function InboxRowImpl({ role, view, cursor, checked, onCheck, onOpen, onDismiss,
       </span>
 
       <div
-        className="col-start-2 flex items-center gap-1 sm:col-start-auto sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 sm:group-aria-selected:opacity-100"
+        className="col-start-2 flex items-center gap-1 sm:col-start-auto sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 sm:group-aria-[current=true]:opacity-100"
         onClick={stop}
       >
         {safeHttpUrl(role.url) && (

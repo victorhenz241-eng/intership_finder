@@ -264,6 +264,8 @@ function StatusPill({ contact }: { contact: Contact }) {
   return <span className={`rounded px-1.5 py-0.5 text-[11px] ${tone}`}>{needsFollowUp(contact) ? "Needs follow-up" : CONTACT_STATUS_LABELS[s]}</span>;
 }
 
+const SMALL_TEXTAREA = "mt-1 w-full resize-y rounded-md border border-rule-2 bg-card px-2 py-1.5 text-[13px] leading-relaxed text-ink placeholder:text-ink-3";
+
 function ContactCard({ contact }: { contact: Contact }) {
   const { updateContact, deleteContact } = useRoles();
   const next = nextContactStatus(contact.status);
@@ -271,6 +273,7 @@ function ContactCard({ contact }: { contact: Contact }) {
   function setStatus(status: ContactStatus) {
     const patch: Parameters<typeof updateContact>[1] = { status };
     const now = new Date().toISOString();
+    if (status === "requested" && !contact.requested_at) patch.requested_at = now;
     if (status === "messaged" && !contact.sent_at) patch.sent_at = now;
     if (status === "replied" && !contact.replied_at) patch.replied_at = now;
     updateContact(contact.id, patch);
@@ -299,7 +302,16 @@ function ContactCard({ contact }: { contact: Contact }) {
         <StatusPill contact={contact} />
       </div>
 
-      {contact.hook && <p className="mt-1.5 text-xs text-ink-2">Hook: {contact.hook}</p>}
+      <AutosaveText
+        id={`contact-hook-${contact.id}`}
+        label="Why this person"
+        value={contact.hook ?? ""}
+        save={(hook) => updateContact(contact.id, { hook: hook.trim() || null })}
+        rows={1}
+        placeholder="Shared school, their post or talk, the team they run: the one specific reason to write"
+        className="mt-2"
+        textareaClassName={SMALL_TEXTAREA}
+      />
 
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
         {next && (
@@ -319,6 +331,7 @@ function ContactCard({ contact }: { contact: Contact }) {
             </option>
           ))}
         </select>
+        {contact.requested_at && <span className="text-[11px] text-ink-3">requested {shortDate(contact.requested_at)}</span>}
         {contact.sent_at && <span className="text-[11px] text-ink-3">sent {shortDate(contact.sent_at)}</span>}
         {contact.replied_at && <span className="text-[11px] text-ink-3">replied {shortDate(contact.replied_at)}</span>}
         <button
@@ -346,8 +359,6 @@ function ContactCard({ contact }: { contact: Contact }) {
     </li>
   );
 }
-
-const SMALL_TEXTAREA = "mt-1 w-full resize-y rounded-md border border-rule-2 bg-card px-2 py-1.5 text-[13px] leading-relaxed text-ink placeholder:text-ink-3";
 
 /**
  * Generated on the server from the role and this contact, then dropped into

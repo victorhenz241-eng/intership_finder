@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { DAILY_LIMITS, withinQuota } from "@/lib/quota";
 import { generateDrafts } from "@/lib/draft";
 import type { Contact, Role } from "@/lib/types";
 
@@ -40,6 +41,10 @@ export async function POST(req: Request) {
 
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) return NextResponse.json({ error: "GROQ_API_KEY is not set on the server." }, { status: 500 });
+
+  if (!(await withinQuota(supabase, "draft"))) {
+    return NextResponse.json({ error: `Daily limit reached (${DAILY_LIMITS.draft} per day). Try again tomorrow.` }, { status: 429 });
+  }
 
   let body: { contactId?: unknown; jdTextOverride?: unknown };
   try {
