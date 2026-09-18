@@ -32,10 +32,37 @@ type Prefill = { name?: string; title?: string; profile_url?: string; hook?: str
 
 /** Contacts for a pipeline role, the hooks n8n found (if any), and a fast add form. Nothing here sends anything. */
 export default function Outreach({ role }: { role: Role }) {
-  const { contactsByRole, contactsError, addContact } = useRoles();
+  const { contactsByRole, contactsError, addContact, setNotice, updateLocal } = useRoles();
   const contacts = contactsByRole.get(role.id) ?? [];
   const hooks = parseHooks(role.outreach_hooks);
   const [adding, setAdding] = useState<Prefill | null>(null);
+  const [finding, setFinding] = useState(false);
+  const [findInfo, setFindInfo] = useState<string | null>(null);
+  const searched = Array.isArray(role.outreach_hooks);
+
+  // Web-search for public profiles at the company. Server-side; never touches linkedin.com.
+  async function findPeople() {
+    setFinding(true);
+    setFindInfo(null);
+    try {
+      const { data } = await getSupabase().auth.getSession();
+      const token = data.session?.access_token;
+      if (!token) throw new Error("Sign in again.");
+      const res = await fetch("/api/find-people", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ roleId: role.id }),
+      });
+      const json = (await res.json()) as { people?: unknown[]; found?: number; error?: string };
+      if (!res.ok || json.error) throw new Error(json.error ?? `HTTP ${res.status}`);
+      updateLocal(role.id, { outreach_hooks: json.people ?? [] });
+      setFindInfo((json.people?.length ?? 0) === 0 ? "Nobody found by search. Add someone by hand." : `${json.found} public profiles found, showing the best ${json.people?.length}.`);
+    } catch (e) {
+      setNotice(`Couldn't search: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setFinding(false);
+    }
+  }
 
   const awaiting = contacts.filter(isAwaitingReply).length;
 
@@ -51,15 +78,26 @@ export default function Outreach({ role }: { role: Role }) {
             </span>
           )}
         </h3>
-        {!adding && (
+        <div className="flex items-center gap-1.5">
           <button
             type="button"
-            onClick={() => setAdding({})}
-            className="h-7 rounded-md bg-[var(--strong-bg)] px-2.5 text-xs font-medium text-[var(--strong)] hover:bg-[#d3ecdd]"
+            onClick={findPeople}
+            disabled={finding}
+            className="h-7 rounded-md border border-rule-2 bg-card px-2.5 text-xs text-ink hover:bg-page disabled:opacity-50"
+            title="Search the web for public profiles at this company. Never touches LinkedIn directly."
           >
-            + Add contact
+            {finding ? "Searching…" : searched ? "Search again" : "Find people"}
           </button>
-        )}
+          {!adding && (
+            <button
+              type="button"
+              onClick={() => setAdding({})}
+              className="h-7 rounded-md bg-[var(--strong-bg)] px-2.5 text-xs font-medium text-[var(--strong)] hover:bg-[#d3ecdd]"
+            >
+              + Add contact
+            </button>
+          )}
+        </div>
       </div>
       <p className="mt-1 text-xs text-ink-3">
         Find people on LinkedIn yourself and note them here. The app prepares drafts and tracks the thread; it never sends or connects.
@@ -83,7 +121,17 @@ export default function Outreach({ role }: { role: Role }) {
         />
       )}
 
-      {hooks.length > 0 && <Hooks hooks={hooks} onUse={(h) => setAdding({ hook: h.text, source: h.source ?? "hook" })} />}
+      {findInfo && <p className="mt-2 text-xs text-ink-3">{findInfo}</p>}
+
+      {hooks.length > 0 && (
+        <Hooks
+          hooks={hooks}
+          added={new Set(contacts.map((c) => c.profile_url).filter(Boolean) as string[])}
+          onUse={(h) =>
+            setAdding({ name: h.name ?? undefined, title: h.title ?? undefined, profile_url: h.url ?? undefined, hook: h.text, source: h.source ?? "hook" })
+          }
+        />
+      )}
 
       {contacts.length > 0 && (
         <ul className="mt-3 flex flex-col gap-2">
@@ -96,26 +144,53 @@ export default function Outreach({ role }: { role: Role }) {
   );
 }
 
-/** Third-party text, assembled from web pages. Text nodes only. */
-function Hooks({ hooks, onUse }: { hooks: OutreachHook[]; onUse: (h: OutreachHook) => void }) {
+/** Third-party text, assembled from search results or web pages. Text nodes only. */
+function Hooks({ hooks, added, onUse }: { hooks: OutreachHook[]; added: Set<string>; onUse: (h: OutreachHook) => void }) {
+  const people = hooks.some((h) => h.name);
   return (
     <div className="mt-3">
-      <h4 className="text-xs text-ink-3">Suggested talking points</h4>
+      <h4 className="text-xs text-ink-3">{people ? "People found by search" : "Suggested talking points"}</h4>
       <ul className="mt-1.5 divide-y divide-rule rounded-md border border-rule text-[13px]">
-        {hooks.map((h, i) => (
-          <li key={i} className="flex items-start gap-3 px-2.5 py-2">
-            <p className="min-w-0 flex-1 whitespace-pre-line text-ink-2">{h.text}</p>
-            {h.url && (
-              <a href={h.url} target="_blank" rel="noopener noreferrer nofollow" className="shrink-0 text-xs text-accent hover:underline">
-                {h.source ?? "source"} ↗
-              </a>
-            )}
-            <button type="button" onClick={() => onUse(h)} className="shrink-0 text-xs text-ink-2 underline-offset-2 hover:underline">
-              Add as contact
-            </button>
-          </li>
-        ))}
+        {hooks.map((h, i) => {
+          const isAdded = Boolean(h.url && added.has(h.url));
+          return (
+            <li key={i} className="flex flex-wrap items-start gap-x-3 gap-y-0.5 px-2.5 py-2">
+              <div className="min-w-0 flex-1">
+                {h.name ? (
+                  <>
+                    <p className="text-ink">
+                      {h.url ? (
+                        <a href={h.url} target="_blank" rel="noopener noreferrer nofollow" className="hover:underline">
+                          {h.name} ↗
+                        </a>
+                      ) : (
+                        h.name
+                      )}
+                      {h.title && <span className="text-ink-3"> · {h.title}</span>}
+                    </p>
+                    <p className="text-xs text-ink-2">{h.text}</p>
+                  </>
+                ) : (
+                  <p className="whitespace-pre-line text-ink-2">{h.text}</p>
+                )}
+              </div>
+              {!h.name && h.url && (
+                <a href={h.url} target="_blank" rel="noopener noreferrer nofollow" className="shrink-0 text-xs text-accent hover:underline">
+                  {h.source ?? "source"} ↗
+                </a>
+              )}
+              {isAdded ? (
+                <span className="shrink-0 text-xs text-ink-3">Added</span>
+              ) : (
+                <button type="button" onClick={() => onUse(h)} className="shrink-0 text-xs text-ink-2 underline-offset-2 hover:underline">
+                  Add as contact
+                </button>
+              )}
+            </li>
+          );
+        })}
       </ul>
+      {people && <p className="mt-1 text-[11px] text-ink-3">From public search results. Open the profile in your own browser; the app never contacts LinkedIn.</p>}
     </div>
   );
 }

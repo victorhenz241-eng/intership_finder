@@ -124,10 +124,19 @@ person's public professional identity (name, title, profile URL).
   Enter. Status ladder `identified → requested → accepted → messaged → replied`,
   plus `dead`. Marking `messaged` stamps `sent_at`; `replied` stamps `replied_at`.
   Per-contact notes autosave like role notes.
-- **Suggested talking points** appear when n8n has filled `roles.outreach_hooks`
-  (an array of strings or `{text, url, source}` objects). Null is the normal
-  state. The text is third-party and is rendered as text only; "Add as contact"
-  pre-fills the hook.
+- **Find people** asks a web search engine (Google results through serper.dev,
+  `POST /api/find-people`, server-side) for public profiles at the company:
+  three queries, alumni of ESSEC / CentraleSupélec / GWU first, then the data
+  and ML team, then engineering managers and recruiters. Hits are kept only when
+  the headline or Google's "Experience:" line names the company, ranked
+  deterministically, and the top three are stored in `roles.outreach_hooks`
+  (`{name, title, url, source: "search", text: reason}`) so a reload does not
+  re-search. The app never requests anything from linkedin.com and never uses
+  your account: you open the profile yourself. "Add as contact" carries name,
+  title, URL and the reason (as the hook) into a contact in one click.
+- `roles.outreach_hooks` may also hold plain strings or `{text, url, source}`
+  talking points written by n8n. Null is the normal state. All of it is
+  third-party text rendered as text only.
 - **Draft outreach** calls `POST /api/draft` (server-side, Groq
   `openai/gpt-oss-120b`, `max_tokens` 3000, low reasoning effort, one retry on an empty generation) with the role, the contact and the
   owner's background, and returns a connection note (hard-capped at 300
@@ -140,7 +149,9 @@ person's public professional identity (name, title, profile URL).
   than `FOLLOW_UP_DAYS` (7) needs a nudge. Pipeline cards show contact counts
   and "to follow up"; the nav tab counts them; `/followups` lists them.
 
-Server env (Vercel, not `NEXT_PUBLIC_`): `GROQ_API_KEY`; optional `OWNER_EMAIL`.
+Server env (Vercel, not `NEXT_PUBLIC_`): `GROQ_API_KEY`, `SERPER_API_KEY`;
+optional `OWNER_EMAIL`. `scripts/people-smoke.mjs "<Company>" "<Role title>"`
+prints the ranked search result locally.
 The route requires the caller's Supabase session and the owner email, so it
 cannot be used anonymously even if the URL is known.
 

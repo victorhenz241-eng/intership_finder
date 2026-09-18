@@ -122,7 +122,14 @@ export function isAwaitingReply(c: Pick<Contact, "status" | "replied_at">): bool
   return (c.status === "requested" || c.status === "messaged") && !c.replied_at;
 }
 
-export type OutreachHook = { text: string; url: string | null; source: string | null };
+export type OutreachHook = {
+  text: string;
+  url: string | null;
+  source: string | null;
+  /** Present when the hook is a person found by /api/find-people. */
+  name: string | null;
+  title: string | null;
+};
 
 /**
  * Coerce whatever n8n wrote into a list of plain-text hooks. Accepts an array of
@@ -134,17 +141,19 @@ export function parseHooks(raw: unknown): OutreachHook[] {
   const out: OutreachHook[] = [];
   for (const item of raw) {
     if (typeof item === "string") {
-      if (item.trim()) out.push({ text: item.trim(), url: null, source: null });
+      if (item.trim()) out.push({ text: item.trim(), url: null, source: null, name: null, title: null });
       continue;
     }
     if (!item || typeof item !== "object") continue;
     const o = item as Record<string, unknown>;
-    const text = [o.text, o.hook, o.summary, o.title].find((v) => typeof v === "string" && v.trim()) as string | undefined;
+    const text = [o.text, o.hook, o.summary, o.reason, o.title].find((v) => typeof v === "string" && v.trim()) as string | undefined;
     if (!text) continue;
     const urlRaw = [o.url, o.link, o.href].find((v) => typeof v === "string") as string | undefined;
     const url = urlRaw && /^https?:\/\//i.test(urlRaw.trim()) ? urlRaw.trim() : null;
     const source = typeof o.source === "string" && o.source.trim() ? o.source.trim() : null;
-    out.push({ text: text.trim(), url, source });
+    const name = typeof o.name === "string" && o.name.trim() ? o.name.trim() : null;
+    const title = typeof o.title === "string" && o.title.trim() && o.title !== text ? o.title.trim() : null;
+    out.push({ text: text.trim(), url, source, name, title });
   }
   return out;
 }

@@ -30,6 +30,8 @@ type Store = {
   /** Optimistically apply `patch`, persist it, revert on failure. Resolves to an error message or null. */
   update: (id: string, patch: Patch) => Promise<string | null>;
   updateMany: (ids: string[], patch: Patch) => Promise<string | null>;
+  /** Apply a change a server route already persisted (e.g. outreach_hooks) without a refetch. */
+  updateLocal: (id: string, patch: Partial<Role>) => void;
   notice: string | null;
   setNotice: (n: string | null) => void;
   contacts: Contact[];
@@ -148,6 +150,10 @@ export function RolesProvider({ children }: { children: ReactNode }) {
     [updateMany]
   );
 
+  const updateLocal = useCallback((id: string, patch: Partial<Role>) => {
+    setRoles((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  }, []);
+
   const addContact = useCallback(async (c: NewContact) => {
     const { data, error } = await getSupabase().from("contacts").insert(c).select("*").single();
     if (error) {
@@ -210,10 +216,10 @@ export function RolesProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<Store>(
     () => ({
-      roles, byId, groups, status, error, lastLoaded, refresh, update, updateMany, notice, setNotice,
+      roles, byId, groups, status, error, lastLoaded, refresh, update, updateMany, updateLocal, notice, setNotice,
       contacts, contactsByRole, contactsError, addContact, updateContact, deleteContact,
     }),
-    [roles, byId, groups, status, error, lastLoaded, refresh, update, updateMany, notice, contacts, contactsByRole, contactsError, addContact, updateContact, deleteContact]
+    [roles, byId, groups, status, error, lastLoaded, refresh, update, updateMany, updateLocal, notice, contacts, contactsByRole, contactsError, addContact, updateContact, deleteContact]
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
