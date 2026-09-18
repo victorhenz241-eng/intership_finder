@@ -15,9 +15,6 @@ const OWNER_EMAIL = process.env.OWNER_EMAIL ?? "victorhenz241@gmail.com";
  * role and contact are read through that session so RLS applies.
  */
 export async function POST(req: Request) {
-  const apiKey = process.env.GROQ_API_KEY;
-  if (!apiKey) return NextResponse.json({ error: "GROQ_API_KEY is not set on the server." }, { status: 500 });
-
   const auth = req.headers.get("authorization") ?? "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
   if (!token) return NextResponse.json({ error: "Sign in required." }, { status: 401 });
@@ -35,6 +32,9 @@ export async function POST(req: Request) {
   if ((userData.user.email ?? "").toLowerCase() !== OWNER_EMAIL.toLowerCase()) {
     return NextResponse.json({ error: "Not allowed." }, { status: 403 });
   }
+
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) return NextResponse.json({ error: "GROQ_API_KEY is not set on the server." }, { status: 500 });
 
   let body: { contactId?: unknown };
   try {

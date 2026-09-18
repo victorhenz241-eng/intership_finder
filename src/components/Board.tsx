@@ -16,7 +16,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { useRoles } from "@/lib/store";
 import { useQueryState } from "@/lib/url";
-import { PIPELINE_STAGES, STAGE_LABELS, isPipelineStage, isPrimary, type PipelineStage, type Role } from "@/lib/types";
+import { PIPELINE_STAGES, STAGE_LABELS, isAwaitingReply, isPipelineStage, isPrimary, needsFollowUp, type PipelineStage, type Role } from "@/lib/types";
 import ScoreChip from "./ScoreChip";
 
 export default function Board() {
@@ -125,13 +125,32 @@ function Column({ stage, roles, onOpen }: { stage: PipelineStage; roles: Role[];
 }
 
 function CardBody({ role }: { role: Role }) {
+  const { contactsByRole } = useRoles();
+  const contacts = contactsByRole.get(role.id) ?? [];
+  const awaiting = contacts.filter(isAwaitingReply).length;
+  const nudge = contacts.filter((c) => needsFollowUp(c)).length;
   return (
-    <div className="flex items-center gap-2.5">
-      <ScoreChip role={role} size="md" />
-      <div className="min-w-0">
-        <p className="truncate text-xs text-ink-3">{role.company}</p>
-        <p className="truncate text-[13px] leading-snug text-ink">{role.title}</p>
+    <div>
+      <div className="flex items-center gap-2.5">
+        <ScoreChip role={role} size="md" />
+        <div className="min-w-0">
+          <p className="truncate text-xs text-ink-3">{role.company}</p>
+          <p className="truncate text-[13px] leading-snug text-ink">{role.title}</p>
+        </div>
       </div>
+      {contacts.length > 0 && (
+        <p className="mt-1.5 flex flex-wrap items-center gap-x-2 text-[11px] text-ink-3">
+          <span>
+            {contacts.length} contact{contacts.length === 1 ? "" : "s"}
+          </span>
+          {awaiting > 0 && <span>· {awaiting} awaiting reply</span>}
+          {nudge > 0 && (
+            <span className="rounded bg-[var(--decent-bg)] px-1 py-px font-medium text-[var(--decent)]">
+              {nudge} to follow up
+            </span>
+          )}
+        </p>
+      )}
     </div>
   );
 }

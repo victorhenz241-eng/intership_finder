@@ -8,10 +8,12 @@ Two modes over one Supabase table:
 - **Pipeline** (`/pipeline`) — Kanban of saved roles only:
   interested → applied → replied → interview → offer → closed. Drag to change stage.
 - **Detail drawer** — slides over either mode (`?role=<id>` deep link) with the
-  LLM's "why it fits", parsed metadata, notes with autosave, and stage controls.
+  LLM's "why it fits", parsed metadata, notes with autosave, stage controls and,
+  for pipeline roles, the outreach panel.
+- **Follow-ups** (`/followups`) — outreach threads that need a nudge.
 
-Rows are written by an external n8n workflow. This app only reads and updates
-`stage` and `notes`. Nothing here inserts or hard-deletes a row: "delete" means
+Rows in `roles` are written by an external n8n workflow. This app only reads and
+updates `stage` and `notes` there. Nothing here inserts or hard-deletes a role: "delete" means
 `stage = 'dismissed'`, which keeps the row in the table so the next sweep does not
 re-add it. Dismissed roles are recoverable from the Dismissed view.
 
@@ -109,6 +111,39 @@ the app treats that as normal and never hides or marks them.
   third-party and untrusted; it is never interpreted as HTML or markdown.
 - Hiding is a view filter. Nothing about eligibility is ever written by the app.
 
+## Outreach
+
+Warm contacts beat cold applications, so a pipeline role carries a list of
+people worth talking to (`public.contacts`, one row per person, see
+`supabase/migrations/2026-09-18-contacts.sql`). The LinkedIn side is manual by
+design: you search, you connect, you paste. The app prepares text and tracks
+the thread. It never sends anything, never scrapes LinkedIn, and stores only a
+person's public professional identity (name, title, profile URL).
+
+- **Add a contact** from the drawer of any pipeline role: name, title, URL,
+  Enter. Status ladder `identified → requested → accepted → messaged → replied`,
+  plus `dead`. Marking `messaged` stamps `sent_at`; `replied` stamps `replied_at`.
+  Per-contact notes autosave like role notes.
+- **Suggested talking points** appear when n8n has filled `roles.outreach_hooks`
+  (an array of strings or `{text, url, source}` objects). Null is the normal
+  state. The text is third-party and is rendered as text only; "Add as contact"
+  pre-fills the hook.
+- **Draft outreach** calls `POST /api/draft` (server-side, Groq
+  `openai/gpt-oss-120b`, `max_tokens` 1200) with the role, the contact and the
+  owner's background, and returns a connection note (hard-capped at 300
+  characters in code) and a longer follow-up message. Both land in editable
+  fields that save to the contact row, with a counter, copy and regenerate.
+  `jd_text` and hooks are passed inside `<<<JOB_DATA>>>` delimiters as data,
+  never as instructions; `scripts/draft-smoke.mjs` checks this against the real
+  Perpay row, whose live posting contains a hidden instruction for AI readers.
+- **Follow-ups**: a `messaged` contact with no `replied_at` and `sent_at` older
+  than `FOLLOW_UP_DAYS` (7) needs a nudge. Pipeline cards show contact counts
+  and "to follow up"; the nav tab counts them; `/followups` lists them.
+
+Server env (Vercel, not `NEXT_PUBLIC_`): `GROQ_API_KEY`; optional `OWNER_EMAIL`.
+The route requires the caller's Supabase session and the owner email, so it
+cannot be used anonymously even if the URL is known.
+
 ## Data notes
 
 - A row is **unscored** when it has no score **and** no reasoning: `fit_score`
@@ -131,7 +166,8 @@ the app treats that as normal and never hides or marks them.
 
 1. The repository lives at github.com/victorhenz241-eng/intership_finder (private).
 2. In Vercel: **Add New → Project**, import the repository (Next.js is auto-detected).
-3. Add both environment variables from `.env.local.example`.
+3. Add the environment variables from `.env.local.example` (`GROQ_API_KEY` without
+   the `NEXT_PUBLIC_` prefix so it stays server-side).
 4. Deploy. Pushes to the default branch redeploy automatically.
 
 From the CLI:

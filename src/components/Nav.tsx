@@ -5,10 +5,10 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useRoles } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
-import { isPipelineStage, isPrimary } from "@/lib/types";
+import { isPipelineStage, isPrimary, needsFollowUp } from "@/lib/types";
 import { relativeTime } from "@/lib/format";
 
-function Tab({ href, label, count, active }: { href: string; label: string; count: number; active: boolean }) {
+function Tab({ href, label, count, active, attention }: { href: string; label: string; count: number; active: boolean; attention?: boolean }) {
   return (
     <Link
       href={href}
@@ -20,7 +20,7 @@ function Tab({ href, label, count, active }: { href: string; label: string; coun
       {label}
       <span
         className={`min-w-[1.5rem] rounded px-1.5 py-0.5 text-center text-xs tabular-nums ${
-          active ? "bg-[#e7e9ee] text-ink" : "bg-transparent text-ink-3"
+          attention ? "bg-[var(--decent-bg)] font-medium text-[var(--decent)]" : active ? "bg-[#e7e9ee] text-ink" : "bg-transparent text-ink-3"
         }`}
       >
         {count}
@@ -31,7 +31,7 @@ function Tab({ href, label, count, active }: { href: string; label: string; coun
 
 export default function Nav() {
   const pathname = usePathname();
-  const { roles, status, lastLoaded, refresh } = useRoles();
+  const { roles, contacts, status, lastLoaded, refresh } = useRoles();
   const { signOut } = useAuth();
   const [, tick] = useState(0);
 
@@ -44,6 +44,7 @@ export default function Nav() {
   let inbox = 0;
   let pipeline = 0;
   let strong = 0;
+  const followUps = contacts.filter((c) => needsFollowUp(c)).length;
   for (const r of roles) {
     if (!isPrimary(r)) continue;
     if (r.stage === "found") {
@@ -61,6 +62,7 @@ export default function Nav() {
         <div className="flex items-center gap-1 rounded-lg bg-[#e3e6eb] p-1">
           <Tab href="/inbox" label="Inbox" count={inbox} active={pathname.startsWith("/inbox")} />
           <Tab href="/pipeline" label="Pipeline" count={pipeline} active={pathname.startsWith("/pipeline")} />
+          <Tab href="/followups" label="Follow-ups" count={followUps} active={pathname.startsWith("/followups")} attention={followUps > 0} />
         </div>
         <span className="hidden text-xs text-ink-3 sm:inline">
           {strong} strong in inbox
