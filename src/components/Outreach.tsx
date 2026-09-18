@@ -359,9 +359,13 @@ function ContactDrafts({ contact }: { contact: Contact }) {
   const [busy, setBusy] = useState(false);
   const [info, setInfo] = useState<string | null>(null);
   const [noteLen, setNoteLen] = useState((contact.draft_note ?? "").length);
+  const [seenNote, setSeenNote] = useState(contact.draft_note);
   const hasDrafts = Boolean(contact.draft_note || contact.draft_message);
-
-  useEffect(() => setNoteLen((contact.draft_note ?? "").length), [contact.draft_note]);
+  // A regenerated or reloaded draft resets the live counter.
+  if (contact.draft_note !== seenNote) {
+    setSeenNote(contact.draft_note);
+    setNoteLen((contact.draft_note ?? "").length);
+  }
 
   async function generate() {
     setBusy(true);

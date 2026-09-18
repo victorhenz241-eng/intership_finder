@@ -34,7 +34,13 @@ export default function Inbox() {
   const showIneligible = params.get("inel") === "1";
   const openId = params.get("role");
 
-  const [cursorId, setCursorId] = useState<string | null>(null);
+  const [cursor, setCursor] = useState<{ id: string | null; idx: number }>({ id: null, idx: 0 });
+  /** Wall clock for "new today"; refreshed every minute so a tab left open stays honest. */
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(t);
+  }, []);
   const [checked, setChecked] = useState<Set<string>>(() => new Set());
   const [lastChecked, setLastChecked] = useState<string | null>(null);
   const [undo, setUndo] = useState<Undo | null>(null);
@@ -71,7 +77,6 @@ export default function Inbox() {
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const now = Date.now();
     const out = pool.filter((r) => {
       if (hideIneligible && isLikelyIneligible(r)) return false;
       if (segment === "strong" && r.severity !== "strong") return false;
@@ -83,41 +88,34 @@ export default function Inbox() {
     });
     out.sort(compareForInbox);
     return out;
-  }, [pool, segment, source, query, hideIneligible]);
+  }, [pool, segment, source, query, hideIneligible, now]);
 
   const rowIndex = useMemo(() => new Map(rows.map((r, i) => [r.id, i])), [rows]);
+
+  // The cursor is derived: when its row vanishes (dismissed, filtered out), it lands on the row that took its place.
+  const storedIdx = cursor.id ? rowIndex.get(cursor.id) ?? -1 : -1;
+  const cursorId: string | null =
+    storedIdx >= 0 ? cursor.id : rows.length === 0 ? null : rows[Math.min(cursor.idx, rows.length - 1)].id;
   const cursorIdx = cursorId ? rowIndex.get(cursorId) ?? -1 : -1;
+  const setCursorId = useCallback(
+    (id: string | null) => setCursor({ id, idx: id ? rowIndex.get(id) ?? 0 : 0 }),
+    [rowIndex]
+  );
 
-  // Keep the cursor on a real row; when its row vanishes, land on the row that took its place.
-  const lastIdx = useRef(0);
+  // When the row shown in the drawer was just dismissed or saved, the drawer follows the cursor.
   useEffect(() => {
-    if (cursorIdx >= 0) {
-      lastIdx.current = cursorIdx;
-      return;
-    }
-    if (rows.length === 0) {
-      setCursorId(null);
-      if (followDrawer.current) {
-        followDrawer.current = false;
-        set({ role: null });
-      }
-      return;
-    }
-    const nextId = rows[Math.min(lastIdx.current, rows.length - 1)].id;
-    setCursorId(nextId);
-    if (followDrawer.current) {
-      followDrawer.current = false;
-      set({ role: nextId });
-    }
-  }, [cursorIdx, rows, set]);
+    if (!followDrawer.current) return;
+    if (cursor.id && storedIdx >= 0) return; // the acted-on row is still here (e.g. the update failed and reverted)
+    followDrawer.current = false;
+    set({ role: cursorId });
+  }, [cursor.id, storedIdx, cursorId, set]);
 
-  // Checked rows that left the list are dropped from the selection.
-  useEffect(() => {
-    setChecked((prev) => {
-      const next = new Set(Array.from(prev).filter((id) => rowIndex.has(id)));
-      return next.size === prev.size ? prev : next;
-    });
-  }, [rowIndex]);
+  // Checked rows that left the list simply stop counting; they come back if the row does.
+  const checkedInView = useMemo(() => {
+    const s = new Set<string>();
+    for (const id of checked) if (rowIndex.has(id)) s.add(id);
+    return s;
+  }, [checked, rowIndex]);
 
   const scrollCursorIntoView = useCallback((id: string) => {
     const el = listRef.current?.querySelector<HTMLElement>(`[data-row-id="${id}"]`);
@@ -133,7 +131,7 @@ export default function Inbox() {
       scrollCursorIntoView(id);
       if (openId) set({ role: id });
     },
-    [rows, cursorIdx, scrollCursorIntoView, openId, set]
+    [rows, cursorIdx, scrollCursorIntoView, openId, set, setCursorId]
   );
 
   const open = useCallback(
@@ -141,7 +139,7 @@ export default function Inbox() {
       setCursorId(id);
       set({ role: id });
     },
-    [set]
+    [set, setCursorId]
   );
 
   const dismiss = useCallback(
@@ -182,7 +180,7 @@ export default function Inbox() {
     setCursorId(ids[0]);
     await updateMany(ids, { stage: "found" });
     scrollCursorIntoView(ids[0]);
-  }, [undo, updateMany, scrollCursorIntoView]);
+  }, [undo, updateMany, scrollCursorIntoView, setCursorId]);
 
   useEffect(() => {
     if (!undo) return;
@@ -229,9 +227,9 @@ export default function Inbox() {
 
   /** Targets for a keyboard action: the checked rows if any, else the cursor row. */
   const targets = useCallback(() => {
-    if (checked.size > 0) return Array.from(checked);
+    if (checkedInView.size > 0) return Array.from(checkedInView);
     return cursorId ? [cursorId] : [];
-  }, [checked, cursorId]);
+  }, [checkedInView, cursorId]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -294,18 +292,17 @@ export default function Inbox() {
           break;
         case "Escape":
           if (openId) set({ role: null });
-          else if (checked.size) setChecked(new Set());
+          else if (checkedInView.size) setChecked(new Set());
           break;
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [help, moveCursor, cursorId, open, view, dismiss, restore, save, targets, toggleCheck, undo, undoNow, openId, set, checked.size, groups, toggleExpanded]);
+  }, [help, moveCursor, cursorId, open, view, dismiss, restore, save, targets, toggleCheck, undo, undoNow, openId, set, checkedInView.size, groups, toggleExpanded]);
 
-  const one = useCallback((fn: (ids: string[]) => void) => (id: string) => fn([id]), []);
-  const onDismiss = useMemo(() => one(dismiss), [one, dismiss]);
-  const onSave = useMemo(() => one(save), [one, save]);
-  const onRestore = useMemo(() => one(restore), [one, restore]);
+  const onDismiss = useCallback((id: string) => dismiss([id]), [dismiss]);
+  const onSave = useCallback((id: string) => save([id]), [save]);
+  const onRestore = useCallback((id: string) => restore([id]), [restore]);
 
   const unscoredCount = useMemo(() => rows.filter(isUnscored).length, [rows]);
 
@@ -361,7 +358,7 @@ export default function Inbox() {
                 Show ineligible
               </label>
             )}
-            {view === "inbox" && showIneligible && ineligibleIds.length > 0 && checked.size === 0 && (
+            {view === "inbox" && showIneligible && ineligibleIds.length > 0 && checkedInView.size === 0 && (
               <button
                 type="button"
                 onClick={() => dismiss(ineligibleIds)}
@@ -371,7 +368,7 @@ export default function Inbox() {
                 Dismiss {ineligibleIds.length} ineligible
               </button>
             )}
-            {view === "inbox" && skipIds.length > 0 && checked.size === 0 && (
+            {view === "inbox" && skipIds.length > 0 && checkedInView.size === 0 && (
               <button
                 type="button"
                 onClick={() => setChecked(new Set(skipIds))}
@@ -400,20 +397,20 @@ export default function Inbox() {
             </button>
           </div>
         </div>
-      {checked.size > 0 && (
+      {checkedInView.size > 0 && (
         <div className="-mx-4 flex flex-wrap items-center gap-2 border-t border-rule bg-[#e6ebf9] px-4 py-1.5 text-xs text-ink sm:-mx-6 sm:px-6">
-          <span className="tabular-nums">{checked.size} selected</span>
+          <span className="tabular-nums">{checkedInView.size} selected</span>
           {view === "inbox" ? (
             <>
-              <button type="button" onClick={() => dismiss(Array.from(checked))} className="rounded bg-ink px-2 py-1 text-card">
+              <button type="button" onClick={() => dismiss(Array.from(checkedInView))} className="rounded bg-ink px-2 py-1 text-card">
                 Dismiss selected
               </button>
-              <button type="button" onClick={() => save(Array.from(checked))} className="rounded border border-rule-2 bg-card px-2 py-1">
+              <button type="button" onClick={() => save(Array.from(checkedInView))} className="rounded border border-rule-2 bg-card px-2 py-1">
                 Save selected
               </button>
             </>
           ) : (
-            <button type="button" onClick={() => restore(Array.from(checked))} className="rounded bg-ink px-2 py-1 text-card">
+            <button type="button" onClick={() => restore(Array.from(checkedInView))} className="rounded bg-ink px-2 py-1 text-card">
               Restore selected
             </button>
           )}
@@ -476,7 +473,7 @@ export default function Inbox() {
               role={r}
               view={view}
               cursor={r.id === cursorId}
-              checked={checked.has(r.id)}
+              checked={checkedInView.has(r.id)}
               onCheck={toggleCheck}
               onOpen={open}
               onDismiss={onDismiss}

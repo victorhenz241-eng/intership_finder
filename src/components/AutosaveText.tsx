@@ -21,31 +21,34 @@ type Props = {
 export default function AutosaveText({ id, label, value, save, rows = 4, placeholder, extra, onInput, className, textareaClassName }: Props) {
   const [text, setText] = useState(value);
   const [state, setState] = useState<"idle" | "dirty" | "saving" | "saved" | "error">("idle");
+  /** The value the parent last gave us: what is known to be persisted. */
+  const [base, setBase] = useState(value);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const latest = useRef(text);
-  latest.current = text;
-  const persisted = useRef(value);
+  const latest = useRef({ text, base });
+  useEffect(() => {
+    latest.current = { text, base };
+  }, [text, base]);
 
   // An outside change (e.g. a generated draft landing in this field) replaces local text unless there is an unsaved edit.
-  useEffect(() => {
-    if (value !== persisted.current && state !== "dirty" && state !== "saving") {
-      persisted.current = value;
+  if (value !== base) {
+    setBase(value);
+    if (state !== "dirty" && state !== "saving") {
       setText(value);
       setState("idle");
     }
-  }, [value, state]);
+  }
 
   const flush = async () => {
     if (timer.current) clearTimeout(timer.current);
     timer.current = null;
-    const v = latest.current;
-    if (v === persisted.current) return;
+    const v = latest.current.text;
+    if (v === latest.current.base) return;
     setState("saving");
     const err = await save(v);
     if (err) setState("error");
     else {
-      persisted.current = v;
-      setState(latest.current === v ? "saved" : "dirty");
+      setBase(v);
+      setState(latest.current.text === v ? "saved" : "dirty");
     }
   };
 
@@ -61,7 +64,8 @@ export default function AutosaveText({ id, label, value, save, rows = 4, placeho
     return () => {
       if (timer.current) {
         clearTimeout(timer.current);
-        if (latest.current !== persisted.current) save(latest.current);
+        const { text: t, base: b } = latest.current;
+        if (t !== b) save(t);
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
