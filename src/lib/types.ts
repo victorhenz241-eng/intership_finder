@@ -1,3 +1,5 @@
+import { safeHttpUrl } from "./format";
+
 export const STAGES = [
   "found",
   "dismissed",
@@ -149,7 +151,7 @@ export function parseHooks(raw: unknown): OutreachHook[] {
     const text = [o.text, o.hook, o.summary, o.reason, o.title].find((v) => typeof v === "string" && v.trim()) as string | undefined;
     if (!text) continue;
     const urlRaw = [o.url, o.link, o.href].find((v) => typeof v === "string") as string | undefined;
-    const url = urlRaw && /^https?:\/\//i.test(urlRaw.trim()) ? urlRaw.trim() : null;
+    const url = safeHttpUrl(urlRaw);
     const source = typeof o.source === "string" && o.source.trim() ? o.source.trim() : null;
     const name = typeof o.name === "string" && o.name.trim() ? o.name.trim() : null;
     const title = typeof o.title === "string" && o.title.trim() && o.title !== text ? o.title.trim() : null;

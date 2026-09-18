@@ -16,7 +16,7 @@ import {
   type OutreachHook,
   type Role,
 } from "@/lib/types";
-import { shortDate } from "@/lib/format";
+import { normalizeUrlInput, safeHttpUrl, shortDate } from "@/lib/format";
 import AutosaveText from "./AutosaveText";
 
 const NEXT_LABEL: Record<ContactStatus, string> = {
@@ -220,7 +220,7 @@ function AddContactForm({
     const ok = await onSubmit({
       name: name.trim(),
       title: title.trim() || null,
-      profile_url: url.trim() || null,
+      profile_url: safeHttpUrl(normalizeUrlInput(url)),
       hook: prefill.hook ?? null,
       source: prefill.source ?? "manual",
     });
@@ -239,7 +239,7 @@ function AddContactForm({
       <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-3">
         <input ref={nameRef} value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" aria-label="Name" required className={input} />
         <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title at company" aria-label="Title" className={input} />
-        <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="LinkedIn URL" aria-label="Profile URL" type="url" className={input} />
+        <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="LinkedIn URL" aria-label="Profile URL" inputMode="url" className={input} />
       </div>
       <div className="mt-2 flex items-center gap-2">
         <button type="submit" disabled={busy || !name.trim()} className="h-7 rounded-md bg-ink px-3 text-xs font-medium text-card hover:bg-[#2b2e36] disabled:opacity-50">
@@ -283,8 +283,8 @@ function ContactCard({ contact }: { contact: Contact }) {
       <div className="flex flex-wrap items-start gap-x-3 gap-y-1">
         <div className="min-w-0 flex-1">
           <p className="text-sm text-ink">
-            {contact.profile_url ? (
-              <a href={contact.profile_url} target="_blank" rel="noopener noreferrer" className="hover:underline">
+            {safeHttpUrl(contact.profile_url) ? (
+              <a href={safeHttpUrl(contact.profile_url)!} target="_blank" rel="noopener noreferrer" className="hover:underline">
                 {contact.name} ↗
               </a>
             ) : (

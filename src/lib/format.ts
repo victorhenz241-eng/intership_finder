@@ -21,3 +21,28 @@ export function shortDate(iso: string | null): string {
     year: "numeric",
   });
 }
+
+/**
+ * Only http(s) URLs are ever rendered as links. Anything else (javascript:, data:,
+ * a bare word) becomes null. Applied to user-entered profile URLs, posting URLs
+ * from the sweep, and hook links, at save time and at render time.
+ */
+export function safeHttpUrl(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const t = raw.trim();
+  if (!/^https?:\/\/[^\s]+$/i.test(t)) return null;
+  try {
+    const u = new URL(t);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return null;
+    return u.toString();
+  } catch {
+    return null;
+  }
+}
+
+/** "www.linkedin.com/in/x" → "https://www.linkedin.com/in/x"; anything already carrying a scheme is left alone. */
+export function normalizeUrlInput(raw: string): string {
+  const t = raw.trim();
+  if (!t || /^[a-z][a-z0-9+.-]*:/i.test(t)) return t;
+  return `https://${t}`;
+}

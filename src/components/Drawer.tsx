@@ -13,7 +13,7 @@ import {
   type Role,
   type Stage,
 } from "@/lib/types";
-import { shortDate } from "@/lib/format";
+import { safeHttpUrl, shortDate } from "@/lib/format";
 import ScoreChip from "./ScoreChip";
 import AutosaveText from "./AutosaveText";
 import Outreach from "./Outreach";
@@ -112,9 +112,9 @@ function DrawerBody({ role, onClose }: { role: Role; onClose: () => void }) {
 
         <StageControls role={role} nextStage={nextStage} inPipeline={inPipeline} />
 
-        {role.url ? (
+        {safeHttpUrl(role.url) ? (
           <a
-            href={role.url}
+            href={safeHttpUrl(role.url)!}
             target="_blank"
             rel="noopener noreferrer"
             className="mt-4 flex h-10 items-center justify-center rounded-md bg-ink text-sm font-medium text-card hover:bg-[#2b2e36]"
@@ -177,8 +177,8 @@ function DrawerBody({ role, onClose }: { role: Role; onClose: () => void }) {
                   <span className="min-w-0 flex-1 truncate text-ink">{m.title}</span>
                   <span className="text-xs text-ink-3">{m.location ?? "—"}</span>
                   <span className="text-xs text-ink-3">{m.source ?? "—"}</span>
-                  {m.url && (
-                    <a href={m.url} target="_blank" rel="noopener noreferrer" className="text-xs text-accent hover:underline">
+                  {safeHttpUrl(m.url) && (
+                    <a href={safeHttpUrl(m.url)!} target="_blank" rel="noopener noreferrer" className="text-xs text-accent hover:underline">
                       open
                     </a>
                   )}

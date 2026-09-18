@@ -2,7 +2,7 @@
 
 import { memo } from "react";
 import type { Role } from "@/lib/types";
-import { relativeTime, shortDate } from "@/lib/format";
+import { relativeTime, safeHttpUrl, shortDate } from "@/lib/format";
 import ScoreChip from "./ScoreChip";
 import EligibilityMark from "./EligibilityMark";
 
@@ -93,9 +93,9 @@ function InboxRowImpl({ role, view, cursor, checked, onCheck, onOpen, onDismiss,
         className="col-start-2 flex items-center gap-1 sm:col-start-auto sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 sm:group-aria-selected:opacity-100"
         onClick={stop}
       >
-        {role.url && (
+        {safeHttpUrl(role.url) && (
           <a
-            href={role.url}
+            href={safeHttpUrl(role.url)!}
             target="_blank"
             rel="noopener noreferrer"
             className="rounded px-1.5 py-0.5 text-xs text-accent hover:bg-[#e6ebf9]"
@@ -129,8 +129,8 @@ function InboxRowImpl({ role, view, cursor, checked, onCheck, onOpen, onDismiss,
               <span className="text-ink-3">{d.location ?? "—"}</span>
               <span className="text-ink-3">{d.source ?? "—"}</span>
               <span className="text-ink-3">{d.stage !== "found" ? d.stage : ""}</span>
-              {d.url && (
-                <a href={d.url} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
+              {safeHttpUrl(d.url) && (
+                <a href={safeHttpUrl(d.url)!} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
                   open
                 </a>
               )}
