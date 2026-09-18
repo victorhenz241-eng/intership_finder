@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useRoles } from "@/lib/store";
 import { getSupabase } from "@/lib/supabase";
+import { requestDrafts } from "@/lib/draftClient";
 import {
   CONTACT_STATUSES,
   CONTACT_STATUS_LABELS,
@@ -32,11 +33,32 @@ type Prefill = { name?: string; title?: string; profile_url?: string; hook?: str
 
 /** Contacts for a pipeline role, the hooks n8n found (if any), and a fast add form. Nothing here sends anything. */
 export default function Outreach({ role }: { role: Role }) {
-  const { contactsByRole, contactsError, addContact, setNotice, updateLocal } = useRoles();
+  const { contactsByRole, contactsError, addContact, updateContact, setNotice, updateLocal } = useRoles();
   const contacts = contactsByRole.get(role.id) ?? [];
   const hooks = parseHooks(role.outreach_hooks);
   const [adding, setAdding] = useState<Prefill | null>(null);
   const [finding, setFinding] = useState(false);
+  const [draftingUrl, setDraftingUrl] = useState<string | null>(null);
+
+  /** One click from a found person to a saved contact with drafts ready: add the contact, then draft for them. */
+  async function draftFor(h: OutreachHook) {
+    if (!h.name) return;
+    setDraftingUrl(h.url ?? h.name);
+    try {
+      const existing = h.url ? contacts.find((c) => c.profile_url === h.url) : undefined;
+      const row =
+        existing ??
+        (await addContact({ role_id: role.id, name: h.name, title: h.title, profile_url: h.url, hook: h.text, source: h.source ?? "search" }));
+      if (!row) return;
+      const json = await requestDrafts(row.id);
+      await updateContact(row.id, { draft_note: json.draft_note, draft_message: json.draft_message });
+      document.getElementById(`contact-${row.id}`)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    } catch (e) {
+      setNotice(`Couldn't draft: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setDraftingUrl(null);
+    }
+  }
   const [findInfo, setFindInfo] = useState<string | null>(null);
   const searched = Array.isArray(role.outreach_hooks);
 
@@ -130,6 +152,8 @@ export default function Outreach({ role }: { role: Role }) {
           onUse={(h) =>
             setAdding({ name: h.name ?? undefined, title: h.title ?? undefined, profile_url: h.url ?? undefined, hook: h.text, source: h.source ?? "hook" })
           }
+          onDraft={draftFor}
+          draftingUrl={draftingUrl}
         />
       )}
 
@@ -145,7 +169,19 @@ export default function Outreach({ role }: { role: Role }) {
 }
 
 /** Third-party text, assembled from search results or web pages. Text nodes only. */
-function Hooks({ hooks, added, onUse }: { hooks: OutreachHook[]; added: Set<string>; onUse: (h: OutreachHook) => void }) {
+function Hooks({
+  hooks,
+  added,
+  onUse,
+  onDraft,
+  draftingUrl,
+}: {
+  hooks: OutreachHook[];
+  added: Set<string>;
+  onUse: (h: OutreachHook) => void;
+  onDraft: (h: OutreachHook) => void;
+  draftingUrl: string | null;
+}) {
   const people = hooks.some((h) => h.name);
   return (
     <div className="mt-3">
@@ -179,13 +215,26 @@ function Hooks({ hooks, added, onUse }: { hooks: OutreachHook[]; added: Set<stri
                   {h.source ?? "source"} ↗
                 </a>
               )}
-              {isAdded ? (
-                <span className="shrink-0 text-xs text-ink-3">Added</span>
-              ) : (
-                <button type="button" onClick={() => onUse(h)} className="shrink-0 text-xs text-ink-2 underline-offset-2 hover:underline">
-                  Add as contact
-                </button>
-              )}
+              <span className="flex shrink-0 items-center gap-2">
+                {h.name && (
+                  <button
+                    type="button"
+                    onClick={() => onDraft(h)}
+                    disabled={draftingUrl !== null}
+                    className="h-7 rounded-md bg-[var(--strong-bg)] px-2.5 text-xs font-medium text-[var(--strong)] hover:bg-[#d3ecdd] disabled:opacity-50"
+                    title="Save this person as a contact and draft a personalised note and message for them"
+                  >
+                    {draftingUrl === (h.url ?? h.name) ? "Drafting…" : "Draft message"}
+                  </button>
+                )}
+                {isAdded ? (
+                  <span className="text-xs text-ink-3">Added</span>
+                ) : (
+                  <button type="button" onClick={() => onUse(h)} className="text-xs text-ink-2 underline-offset-2 hover:underline">
+                    Add as contact
+                  </button>
+                )}
+              </span>
             </li>
           );
         })}
@@ -282,7 +331,7 @@ function ContactCard({ contact }: { contact: Contact }) {
   const quiet = "h-7 rounded-md border border-rule-2 bg-card px-2 text-xs text-ink-2 hover:text-ink";
 
   return (
-    <li className="rounded-md border border-rule bg-card p-2.5">
+    <li id={`contact-${contact.id}`} className="rounded-md border border-rule bg-card p-2.5">
       <div className="flex flex-wrap items-start gap-x-3 gap-y-1">
         <div className="min-w-0 flex-1">
           <p className="text-sm text-ink">
@@ -382,17 +431,8 @@ function ContactDrafts({ contact }: { contact: Contact }) {
     setBusy(true);
     setInfo(null);
     try {
-      const { data } = await getSupabase().auth.getSession();
-      const token = data.session?.access_token;
-      if (!token) throw new Error("Sign in again.");
-      const res = await fetch("/api/draft", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ contactId: contact.id }),
-      });
-      const json = (await res.json()) as { draft_note?: string; draft_message?: string; note_truncated?: boolean; error?: string };
-      if (!res.ok || json.error) throw new Error(json.error ?? `HTTP ${res.status}`);
-      await updateContact(contact.id, { draft_note: json.draft_note ?? "", draft_message: json.draft_message ?? "" });
+      const json = await requestDrafts(contact.id);
+      await updateContact(contact.id, { draft_note: json.draft_note, draft_message: json.draft_message });
       if (json.note_truncated) setInfo(`Note was cut to ${NOTE_MAX_CHARS} characters.`);
     } catch (e) {
       setNotice(`Couldn't draft: ${e instanceof Error ? e.message : String(e)}`);
