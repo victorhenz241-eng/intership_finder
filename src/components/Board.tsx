@@ -18,9 +18,11 @@ import { useRoles } from "@/lib/store";
 import { useQueryState } from "@/lib/url";
 import { PIPELINE_STAGES, STAGE_LABELS, isAwaitingReply, isPipelineStage, isPrimary, needsFollowUp, type PipelineStage, type Role } from "@/lib/types";
 import ScoreChip from "./ScoreChip";
+import { relativeTime } from "@/lib/format";
+import { exportPipelineCsv } from "@/lib/export";
 
 export default function Board() {
-  const { roles, status, error, refresh, update } = useRoles();
+  const { roles, contacts, status, error, refresh, update } = useRoles();
   const { set } = useQueryState();
   const [activeId, setActiveId] = useState<string | null>(null);
 
@@ -54,9 +56,20 @@ export default function Board() {
     <main className="mx-auto w-full max-w-[120rem] flex-1 px-4 py-4 sm:px-6">
       <div className="mb-3 flex items-center justify-between text-xs text-ink-3">
         <span className="tabular-nums">{total} in pipeline</span>
-        <Link href="/inbox?view=dismissed" className="hover:text-ink">
-          Dismissed ({dismissedCount}) →
-        </Link>
+        <span className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => exportPipelineCsv(roles, contacts)}
+            disabled={status !== "ready" || total === 0}
+            className="hover:text-ink disabled:opacity-50"
+            title="Download every pipeline role with its contacts as CSV"
+          >
+            Export CSV
+          </button>
+          <Link href="/inbox?view=dismissed" className="hover:text-ink">
+            Dismissed ({dismissedCount}) →
+          </Link>
+        </span>
       </div>
 
       {status === "error" && (
@@ -138,11 +151,19 @@ function CardBody({ role }: { role: Role }) {
           <p className="truncate text-[13px] leading-snug text-ink">{role.title}</p>
         </div>
       </div>
-      {contacts.length > 0 && (
+      {(contacts.length > 0 || role.stage_changed_at) && (
         <p className="mt-1.5 flex flex-wrap items-center gap-x-2 text-[11px] text-ink-3">
-          <span>
-            {contacts.length} contact{contacts.length === 1 ? "" : "s"}
-          </span>
+          {role.stage_changed_at && (
+            <span title={`In ${STAGE_LABELS[role.stage]} since ${new Date(role.stage_changed_at).toLocaleDateString()}`}>
+              {STAGE_LABELS[role.stage].toLowerCase()} {relativeTime(role.stage_changed_at)} ago
+            </span>
+          )}
+          {contacts.length > 0 && (
+            <span>
+              {role.stage_changed_at ? "· " : ""}
+              {contacts.length} contact{contacts.length === 1 ? "" : "s"}
+            </span>
+          )}
           {awaiting > 0 && <span>· {awaiting} awaiting reply</span>}
           {nudge > 0 && (
             <span className="rounded bg-[var(--decent-bg)] px-1 py-px font-medium text-[var(--decent)]">

@@ -17,6 +17,14 @@ updates `stage` and `notes` there. Nothing here inserts or hard-deletes a role: 
 `stage = 'dismissed'`, which keeps the row in the table so the next sweep does not
 re-add it. Dismissed roles are recoverable from the Dismissed view.
 
+## Security headers
+
+`next.config.mjs` sets a Content-Security-Policy (self plus the Supabase
+origin; `'unsafe-inline'` scripts are required by Next without a nonce
+pipeline), `frame-ancestors 'none'`, `nosniff`, a referrer policy and a
+permissions policy. Every rendered link goes through `safeHttpUrl()`, which
+drops anything that is not http(s).
+
 ## Keyboard shortcuts (inbox)
 
 | Key | Action |
@@ -75,6 +83,10 @@ Authentication → Users. One-time dashboard setup:
    turn off "Allow new users to sign up".
 3. Run `supabase/migrations/2026-09-18-auth-rls.sql`. It drops the anon policies
    and pins every policy to the owner email via `public.is_owner()`.
+4. Run `supabase/migrations/2026-09-18-contacts.sql` and
+   `supabase/migrations/2026-09-18-audit.sql` (contacts table, timestamps,
+   quotas). The app degrades gracefully until they run: writes retry without
+   the new columns and the quota check allows the call.
 
 The built-in mailer allows only a handful of OTP emails per hour; if a link never
 arrives, check the rate-limit notice in Authentication → Rate Limits.
@@ -145,9 +157,17 @@ person's public professional identity (name, title, profile URL).
   `jd_text` and hooks are passed inside `<<<JOB_DATA>>>` delimiters as data,
   never as instructions; `scripts/draft-smoke.mjs` checks this against the real
   Perpay row, whose live posting contains a hidden instruction for AI readers.
-- **Follow-ups**: a `messaged` contact with no `replied_at` and `sent_at` older
-  than `FOLLOW_UP_DAYS` (7) needs a nudge. Pipeline cards show contact counts
-  and "to follow up"; the nav tab counts them; `/followups` lists them.
+- **Follow-ups**: a `messaged` contact (by `sent_at`) or a `requested` one (by
+  `requested_at`) with no `replied_at` after `FOLLOW_UP_DAYS` (7) needs a nudge.
+  Pipeline cards show "applied 9d ago" (from `stage_changed_at`), contact counts
+  and "to follow up"; the nav tab counts them; `/followups` lists them with
+  inline Replied / Dead buttons.
+- **What to emphasise** is a per-role line (stored in `roles.draft_message`)
+  that feeds every outreach draft for that role.
+- **Export CSV** on the pipeline page downloads every pipeline role with its
+  contacts, entirely in the browser.
+- **Daily quotas**: 60 drafts and 40 people searches per day (`bump_usage()`,
+  `api_usage` table). A stolen session cannot run up a bill.
 
 Server env (Vercel, not `NEXT_PUBLIC_`): `GROQ_API_KEY`, `SERPER_API_KEY`;
 optional `OWNER_EMAIL`. `scripts/people-smoke.mjs "<Company>" "<Role title>"`

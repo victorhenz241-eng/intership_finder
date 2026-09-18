@@ -14,7 +14,7 @@ import { getSupabase } from "./supabase";
 import type { Contact, Role } from "./types";
 
 type Status = "loading" | "ready" | "error";
-type Patch = Partial<Pick<Role, "stage" | "notes" | "stage_changed_at">>;
+type Patch = Partial<Pick<Role, "stage" | "notes" | "stage_changed_at" | "draft_message">>;
 
 /** Postgres "column does not exist": the audit migration has not been run yet. */
 function isMissingColumn(message: string) {
@@ -246,6 +246,7 @@ function pick(from: Role, patch: Patch): Patch {
   if ("stage" in patch) out.stage = from.stage;
   if ("notes" in patch) out.notes = from.notes;
   if ("stage_changed_at" in patch) out.stage_changed_at = from.stage_changed_at;
+  if ("draft_message" in patch) out.draft_message = from.draft_message;
   return out;
 }
 

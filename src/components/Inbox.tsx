@@ -39,6 +39,7 @@ export default function Inbox() {
   }
   const queryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const source = params.get("s") ?? "";
+  const loc = params.get("l") ?? "";
   /** "Show ineligible" toggle. Off by default; only ever hides an explicit likely_ineligible verdict. */
   const showIneligible = params.get("inel") === "1";
   const openId = params.get("role");
@@ -81,12 +82,29 @@ export default function Inbox() {
     [pool]
   );
 
+  /** Most common city/state values in the pool, for the location box's suggestions. */
+  const locationHints = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const r of pool) {
+      for (const part of (r.location ?? "").split(/;|\band\b/)) {
+        const t = part.trim();
+        if (t && !/remote/i.test(t)) counts.set(t, (counts.get(t) ?? 0) + 1);
+      }
+    }
+    return Array.from(counts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 12)
+      .map(([k]) => k);
+  }, [pool]);
+
   // Ineligible rows are hidden in the inbox only; the dismissed view shows everything so recovery is never hampered.
   const hideIneligible = view === "inbox" && !showIneligible;
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
+    const l = loc.trim().toLowerCase();
     const out = pool.filter((r) => {
+      if (l && !(r.location ?? "").toLowerCase().includes(l)) return false;
       if (hideIneligible && isLikelyIneligible(r)) return false;
       if (segment === "strong" && r.severity !== "strong") return false;
       if (segment === "decent" && r.severity !== "decent") return false;
@@ -97,7 +115,7 @@ export default function Inbox() {
     });
     out.sort(compareForInbox);
     return out;
-  }, [pool, segment, source, query, hideIneligible, now]);
+  }, [pool, segment, source, query, loc, hideIneligible, now]);
 
   const rowIndex = useMemo(() => new Map(rows.map((r, i) => [r.id, i])), [rows]);
 
@@ -347,6 +365,21 @@ export default function Inbox() {
             aria-label="Search company or title"
             className="h-7 w-full min-w-[10rem] rounded-md border border-rule-2 bg-card px-2 text-xs text-ink placeholder:text-ink-3 sm:w-56"
           />
+          <input
+            type="search"
+            value={loc}
+            onChange={(e) => set({ l: e.target.value })}
+            placeholder="Location"
+            aria-label="Filter by location"
+            list="inbox-locations"
+            className="h-7 w-full min-w-[7rem] rounded-md border border-rule-2 bg-card px-2 text-xs text-ink placeholder:text-ink-3 sm:w-36"
+          />
+          <datalist id="inbox-locations">
+            <option value="Remote" />
+            {locationHints.map((h) => (
+              <option key={h} value={h} />
+            ))}
+          </datalist>
           <select
             value={source}
             onChange={(e) => set({ s: e.target.value || null })}

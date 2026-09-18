@@ -60,6 +60,7 @@ export type Role = {
   /** Stamped by the enrichment workflow on every pass (drains its queue). Read-only here; the app never writes it. */
   eligibility_checked_at: string | null;
   stage: Stage;
+  /** Owner-written "what to emphasise for this role"; feeds the outreach draft prompt. */
   draft_message: string | null;
   notes: string | null;
   updated_at: string | null;

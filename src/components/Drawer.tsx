@@ -125,6 +125,20 @@ function DrawerBody({ role, onClose }: { role: Role; onClose: () => void }) {
           <p className="mt-4 text-sm text-ink-3">No posting URL on this row.</p>
         )}
 
+        {inPipeline && (
+          <AutosaveText
+            id="emphasis"
+            label="What to emphasise for this role"
+            value={role.draft_message ?? ""}
+            save={(draft_message) => update(role.id, { draft_message: draft_message.trim() || null })}
+            rows={2}
+            placeholder="The one or two things about you that matter most here. Feeds every outreach draft for this role, and your CV tweak."
+            className="mt-5"
+          />
+        )}
+
+        {inPipeline && <Outreach role={role} />}
+
         <dl className="mt-5 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-xs">
           <Meta k="Source" v={role.source} />
           <Meta k="Posted" v={shortDate(role.posted_at)} />
@@ -149,13 +163,15 @@ function DrawerBody({ role, onClose }: { role: Role; onClose: () => void }) {
         </section>
 
         {role.jd_text && role.jd_text.trim() ? (
-          <section className="mt-6">
-            <h3 className="text-xs text-ink-3">Job description</h3>
+          <details className="mt-6 group" open={!inPipeline}>
+            <summary className="cursor-pointer select-none text-xs text-ink-3 hover:text-ink">
+              Job description <span className="text-ink-3 group-open:hidden">(show)</span>
+            </summary>
             {/* Third-party text. Rendered as a text node only: never HTML or markdown. */}
             <div className="mt-1.5 max-h-[24rem] overflow-y-auto rounded-md border border-rule bg-page px-3 py-2">
               <p className="whitespace-pre-line text-[13px] leading-relaxed text-ink-2">{role.jd_text.trim()}</p>
             </div>
-          </section>
+          </details>
         ) : (
           !meta &&
           role.description && (
@@ -203,7 +219,6 @@ function DrawerBody({ role, onClose }: { role: Role; onClose: () => void }) {
           className="mt-6"
         />
 
-        {inPipeline && <Outreach role={role} />}
       </div>
     </div>
   );
