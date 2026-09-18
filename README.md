@@ -129,7 +129,7 @@ person's public professional identity (name, title, profile URL).
   state. The text is third-party and is rendered as text only; "Add as contact"
   pre-fills the hook.
 - **Draft outreach** calls `POST /api/draft` (server-side, Groq
-  `openai/gpt-oss-120b`, `max_tokens` 1200) with the role, the contact and the
+  `openai/gpt-oss-120b`, `max_tokens` 3000, low reasoning effort, one retry on an empty generation) with the role, the contact and the
   owner's background, and returns a connection note (hard-capped at 300
   characters in code) and a longer follow-up message. Both land in editable
   fields that save to the contact row, with a counter, copy and regenerate.

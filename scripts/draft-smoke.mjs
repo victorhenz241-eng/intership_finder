@@ -55,10 +55,35 @@ function report(label, d) {
   return !bad;
 }
 
+const rest = (path, init = {}) =>
+  fetch(`${URL_}/rest/v1/${path}`, { ...init, headers: { apikey: KEY, Authorization: `Bearer ${token}`, "Content-Type": "application/json", Prefer: "return=representation", ...(init.headers ?? {}) } });
+
 let ok = true;
-ok = report("stored row (jd_text as in the table)", await generateDrafts({ role, contact }, GROQ_API_KEY)) && ok;
-ok = report("stored row + the live posting's hidden instruction appended", await generateDrafts({ role: { ...role, jd_text: (role.jd_text ?? "") + INJECTION }, contact }, GROQ_API_KEY)) && ok;
-if (liveJd) ok = report("full live Greenhouse posting as jd_text", await generateDrafts({ role: { ...role, jd_text: liveJd }, contact }, GROQ_API_KEY)) && ok;
-ok = report("injection also in outreach_hooks", await generateDrafts({ role: { ...role, outreach_hooks: [{ text: INJECTION, url: "https://example.com" }] }, contact }, GROQ_API_KEY)) && ok;
+if (!remote) {
+  ok = report("stored row (jd_text as in the table)", await generateDrafts({ role, contact }, GROQ_API_KEY)) && ok;
+  ok = report("stored row + the live posting's hidden instruction appended", await generateDrafts({ role: { ...role, jd_text: (role.jd_text ?? "") + INJECTION }, contact }, GROQ_API_KEY)) && ok;
+  if (liveJd) ok = report("full live Greenhouse posting as jd_text", await generateDrafts({ role: { ...role, jd_text: liveJd }, contact }, GROQ_API_KEY)) && ok;
+  ok = report("injection also in outreach_hooks", await generateDrafts({ role: { ...role, outreach_hooks: [{ text: INJECTION, url: "https://example.com" }] }, contact }, GROQ_API_KEY)) && ok;
+} else {
+  if (!rows || rows.length !== 1) throw new Error("Remote mode could not read the role with the token: " + JSON.stringify(rows).slice(0, 200));
+  const ins = await rest("contacts", { method: "POST", body: JSON.stringify({ role_id: roleId, name: contact.name, title: contact.title, source: "smoke-test" }) });
+  const [tmp] = await ins.json();
+  if (!tmp?.id) throw new Error("Could not insert the throwaway contact: " + JSON.stringify(tmp));
+  console.log(`throwaway contact ${tmp.id} inserted`);
+  const call = async (jdTextOverride) => {
+    const res = await fetch(DRAFT_URL, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ contactId: tmp.id, jdTextOverride }) });
+    const json = await res.json();
+    if (!res.ok || json.error) throw new Error(`${DRAFT_URL} ${res.status}: ${json.error ?? JSON.stringify(json)}`);
+    return json;
+  };
+  try {
+    ok = report("deployed route, stored row", await call(undefined)) && ok;
+    ok = report("deployed route, stored row + hidden instruction appended", await call((role.jd_text ?? "") + INJECTION)) && ok;
+    if (liveJd) ok = report("deployed route, full live Greenhouse posting", await call(liveJd)) && ok;
+  } finally {
+    const del = await rest(`contacts?id=eq.${tmp.id}`, { method: "DELETE" });
+    console.log(`throwaway contact deleted: ${del.ok}`);
+  }
+}
 console.log(ok ? "\nALL PASS" : "\nFAIL");
 process.exit(ok ? 0 : 1);

@@ -5,11 +5,16 @@
 import { NOTE_MAX_CHARS, parseHooks, type Contact, type Role } from "./types.ts";
 
 export const GROQ_MODEL = "openai/gpt-oss-120b";
-/** gpt-oss-120b reasons before answering; 300 made it return empty strings in the sweep. */
-export const GROQ_MAX_TOKENS = 1200;
+/**
+ * gpt-oss-120b reasons before answering and that reasoning counts against max_tokens:
+ * 300 returned empty strings in the sweep, and 1200 still hit an empty generation on a
+ * long JD with an injection in it. 3000 plus low reasoning effort leaves room.
+ */
+export const GROQ_MAX_TOKENS = 3000;
+export const GROQ_REASONING_EFFORT = "low";
 const JD_MAX_CHARS = 7000;
 
-export const OWNER_BACKGROUND = `Victor Henz. Data science / AI engineer at Canal+ (BCE, Broadcasting Center Europe), building AI-powered internal tools for business users, focused on LLMs over structured data. Student in the ESSEC / CentraleSupélec AIDAMS dual degree (Bachelor's, graduating 2028); on exchange at George Washington University (GWU) in spring 2027. Fluent in Python, SQL, TypeScript/Next.js, Snowflake, FastAPI, Docker, GCP, Git. Co-founded Parsed, an AI news aggregator. Looking for a Summer 2027 internship in the US.`;
+export const OWNER_BACKGROUND = `Victor Henz. Data science / AI engineer at Canal+ (BCE, Broadcasting Center Europe), building AI-powered internal tools for business users, focused on LLMs over structured data. Undergraduate student (Bachelor's level, NOT a master's student) in the ESSEC / CentraleSupélec AIDAMS dual degree, graduating 2028; on exchange at George Washington University (GWU) in spring 2027. Fluent in Python, SQL, TypeScript/Next.js, Snowflake, FastAPI, Docker, GCP, Git. Co-founded Parsed, an AI news aggregator. Looking for a Summer 2027 internship in the US.`;
 
 const SYSTEM = `You write short LinkedIn outreach for Victor, who will review and edit every word before sending anything himself. You produce text only; nothing is sent by you.
 
@@ -104,6 +109,16 @@ export function parseDraftResponse(content: string): Drafts {
 }
 
 export async function generateDrafts(input: DraftInput, apiKey: string, fetchImpl: typeof fetch = fetch): Promise<Drafts> {
+  try {
+    return await callGroq(input, apiKey, fetchImpl);
+  } catch (e) {
+    // An empty generation (reasoning ate the budget) is transient at temperature 0.5: one retry.
+    if (e instanceof Error && /json_validate_failed|no JSON|empty drafts/.test(e.message)) return callGroq(input, apiKey, fetchImpl);
+    throw e;
+  }
+}
+
+async function callGroq(input: DraftInput, apiKey: string, fetchImpl: typeof fetch): Promise<Drafts> {
   const res = await fetchImpl("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -111,6 +126,7 @@ export async function generateDrafts(input: DraftInput, apiKey: string, fetchImp
       model: GROQ_MODEL,
       temperature: 0.5,
       max_tokens: GROQ_MAX_TOKENS,
+      reasoning_effort: GROQ_REASONING_EFFORT,
       response_format: { type: "json_object" },
       messages: buildMessages(input),
     }),
