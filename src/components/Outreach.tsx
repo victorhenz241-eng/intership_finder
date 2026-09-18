@@ -2,9 +2,11 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useRoles } from "@/lib/store";
+import { getSupabase } from "@/lib/supabase";
 import {
   CONTACT_STATUSES,
   CONTACT_STATUS_LABELS,
+  NOTE_MAX_CHARS,
   isAwaitingReply,
   needsFollowUp,
   nextContactStatus,
@@ -265,6 +267,119 @@ function ContactCard({ contact }: { contact: Contact }) {
         className="mt-2"
         textareaClassName="mt-1 w-full resize-y rounded-md border border-rule-2 bg-card px-2 py-1.5 text-[13px] leading-relaxed text-ink placeholder:text-ink-3"
       />
+      <ContactDrafts contact={contact} />
     </li>
+  );
+}
+
+const SMALL_TEXTAREA = "mt-1 w-full resize-y rounded-md border border-rule-2 bg-card px-2 py-1.5 text-[13px] leading-relaxed text-ink placeholder:text-ink-3";
+
+/**
+ * Generated on the server from the role and this contact, then dropped into
+ * editable fields that persist to the contact row. Nothing here sends anything:
+ * the only way out is the copy button and the user's own clipboard.
+ */
+function ContactDrafts({ contact }: { contact: Contact }) {
+  const { updateContact, setNotice } = useRoles();
+  const [busy, setBusy] = useState(false);
+  const [info, setInfo] = useState<string | null>(null);
+  const [noteLen, setNoteLen] = useState((contact.draft_note ?? "").length);
+  const hasDrafts = Boolean(contact.draft_note || contact.draft_message);
+
+  useEffect(() => setNoteLen((contact.draft_note ?? "").length), [contact.draft_note]);
+
+  async function generate() {
+    setBusy(true);
+    setInfo(null);
+    try {
+      const { data } = await getSupabase().auth.getSession();
+      const token = data.session?.access_token;
+      if (!token) throw new Error("Sign in again.");
+      const res = await fetch("/api/draft", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ contactId: contact.id }),
+      });
+      const json = (await res.json()) as { draft_note?: string; draft_message?: string; note_truncated?: boolean; error?: string };
+      if (!res.ok || json.error) throw new Error(json.error ?? `HTTP ${res.status}`);
+      await updateContact(contact.id, { draft_note: json.draft_note ?? "", draft_message: json.draft_message ?? "" });
+      if (json.note_truncated) setInfo(`Note was cut to ${NOTE_MAX_CHARS} characters.`);
+    } catch (e) {
+      setNotice(`Couldn't draft: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const over = noteLen > NOTE_MAX_CHARS;
+
+  return (
+    <div className="mt-2">
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={generate}
+          disabled={busy}
+          className="h-7 rounded-md border border-rule-2 bg-card px-2.5 text-xs text-ink hover:bg-page disabled:opacity-50"
+        >
+          {busy ? "Drafting…" : hasDrafts ? "Regenerate drafts" : "Draft outreach"}
+        </button>
+        {info && <span className="text-[11px] text-ink-3">{info}</span>}
+      </div>
+      {hasDrafts && (
+        <>
+          <AutosaveText
+            id={`draft-note-${contact.id}`}
+            label="Connection note"
+            value={contact.draft_note ?? ""}
+            save={(draft_note) => updateContact(contact.id, { draft_note })}
+            onInput={(v) => setNoteLen(v.length)}
+            rows={3}
+            className="mt-2"
+            textareaClassName={SMALL_TEXTAREA + (over ? " border-[#c94b4b]" : "")}
+            extra={
+              <>
+                <span className={over ? "font-medium text-[#c94b4b]" : ""}>
+                  {noteLen}/{NOTE_MAX_CHARS}
+                </span>
+                <CopyButton text={contact.draft_note ?? ""} />
+              </>
+            }
+          />
+          <AutosaveText
+            id={`draft-message-${contact.id}`}
+            label="Message after they accept"
+            value={contact.draft_message ?? ""}
+            save={(draft_message) => updateContact(contact.id, { draft_message })}
+            rows={6}
+            className="mt-2"
+            textareaClassName={SMALL_TEXTAREA}
+            extra={<CopyButton text={contact.draft_message ?? ""} />}
+          />
+        </>
+      )}
+    </div>
+  );
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [done, setDone] = useState(false);
+  return (
+    <button
+      type="button"
+      disabled={!text}
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(text);
+          setDone(true);
+          setTimeout(() => setDone(false), 1500);
+        } catch {
+          /* clipboard blocked: the text is still selectable in the field */
+        }
+      }}
+      className="rounded px-1 text-[11px] text-ink-2 hover:text-ink disabled:opacity-40"
+    >
+      {done ? "Copied" : "Copy"}
+    </button>
   );
 }

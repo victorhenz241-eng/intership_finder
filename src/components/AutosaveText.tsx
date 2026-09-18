@@ -11,12 +11,14 @@ type Props = {
   placeholder?: string;
   /** Rendered right of the status text, e.g. a character counter. */
   extra?: React.ReactNode;
+  /** Fires on every keystroke (for live counters); saving is still debounced. */
+  onInput?: (v: string) => void;
   className?: string;
   textareaClassName?: string;
 };
 
 /** Debounced textarea: saves 800ms after the last keystroke, on blur, and on unmount. */
-export default function AutosaveText({ id, label, value, save, rows = 4, placeholder, extra, className, textareaClassName }: Props) {
+export default function AutosaveText({ id, label, value, save, rows = 4, placeholder, extra, onInput, className, textareaClassName }: Props) {
   const [text, setText] = useState(value);
   const [state, setState] = useState<"idle" | "dirty" | "saving" | "saved" | "error">("idle");
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -49,6 +51,7 @@ export default function AutosaveText({ id, label, value, save, rows = 4, placeho
 
   const onChange = (v: string) => {
     setText(v);
+    onInput?.(v);
     setState("dirty");
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(flush, 800);
