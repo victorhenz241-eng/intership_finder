@@ -2,7 +2,7 @@
  * Outreach draft generation. Server-only: the Groq key never reaches the browser.
  * Pure helpers here are unit-testable without Next.js (see scripts/draft-smoke.mjs).
  */
-import { NOTE_MAX_CHARS, parseHooks, type Contact, type Role } from "./types";
+import { NOTE_MAX_CHARS, parseHooks, type Contact, type Role } from "./types.ts";
 
 export const GROQ_MODEL = "openai/gpt-oss-120b";
 /** gpt-oss-120b reasons before answering; 300 made it return empty strings in the sweep. */
