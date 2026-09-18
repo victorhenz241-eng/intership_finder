@@ -58,23 +58,27 @@ alter table public.roles add constraint roles_stage_check
   check (stage in ('found','dismissed','interested','applied','replied','interview','offer','closed'));
 ```
 
-The anon role must be able to read rows and update `stage` and `notes`. If the app
-reports "permission denied", run this in the SQL editor:
+## Sign-in
 
-```sql
-alter table public.roles enable row level security;
+The app is single-user and sits behind Supabase magic-link auth. Unauthenticated
+visitors see only the sign-in screen; the sign-in never creates an account
+(`shouldCreateUser: false`), so the user must already exist in
+Authentication → Users. One-time dashboard setup:
 
-create policy "roles are readable"
-  on public.roles for select
-  to anon, authenticated
-  using (true);
+1. Authentication → URL Configuration: Site URL `https://intership-finder-nine.vercel.app`;
+   Redirect URLs `https://intership-finder-nine.vercel.app/**` and `http://localhost:3000/**`.
+   Magic links fail silently when the return URL is not listed here.
+2. Authentication → Users → Add user with the owner email (or sign in once while
+   sign-ups are still open), then Authentication → Sign In / Providers → Email →
+   turn off "Allow new users to sign up".
+3. Run `supabase/migrations/2026-09-18-auth-rls.sql`. It drops the anon policies
+   and pins every policy to the owner email via `public.is_owner()`.
 
-create policy "roles stage and notes are updatable"
-  on public.roles for update
-  to anon, authenticated
-  using (true)
-  with check (true);
-```
+The built-in mailer allows only a handful of OTP emails per hour; if a link never
+arrives, check the rate-limit notice in Authentication → Rate Limits.
+
+n8n keeps writing through its own credential, which is the service_role key and
+bypasses RLS. Nothing in the app ever runs with that key.
 
 ## Duplicate folding
 

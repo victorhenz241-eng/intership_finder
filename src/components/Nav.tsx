@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useRoles } from "@/lib/store";
+import { useAuth } from "@/lib/auth";
 import { isPipelineStage, isPrimary } from "@/lib/types";
 import { relativeTime } from "@/lib/format";
 
@@ -31,6 +32,7 @@ function Tab({ href, label, count, active }: { href: string; label: string; coun
 export default function Nav() {
   const pathname = usePathname();
   const { roles, status, lastLoaded, refresh } = useRoles();
+  const { signOut } = useAuth();
   const [, tick] = useState(0);
 
   // Re-render every minute so "updated 3m ago" stays honest.
@@ -75,6 +77,14 @@ export default function Nav() {
             title="Reload roles from Supabase"
           >
             Refresh
+          </button>
+          <button
+            type="button"
+            onClick={() => signOut()}
+            className="h-8 rounded-md px-2 text-sm text-ink-3 hover:text-ink"
+            title="Sign out"
+          >
+            Sign out
           </button>
         </div>
       </div>
