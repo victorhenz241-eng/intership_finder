@@ -61,7 +61,93 @@ export type Role = {
   draft_message: string | null;
   notes: string | null;
   updated_at: string | null;
+  /**
+   * Suggested talking points, written by n8n from third-party web pages. Null for
+   * most rows and that is normal. Untrusted: render as text only, never HTML.
+   */
+  outreach_hooks: unknown;
 };
+
+/** Outreach status ladder. `dead` can be entered from any rung. */
+export const CONTACT_STATUSES = ["identified", "requested", "accepted", "messaged", "replied", "dead"] as const;
+export type ContactStatus = (typeof CONTACT_STATUSES)[number];
+
+export const CONTACT_STATUS_LABELS: Record<ContactStatus, string> = {
+  identified: "Identified",
+  requested: "Request sent",
+  accepted: "Accepted",
+  messaged: "Messaged",
+  replied: "Replied",
+  dead: "Dead",
+};
+
+/** A person worth talking to about a role. Professional identity only: no email or phone, ever. */
+export type Contact = {
+  id: string;
+  role_id: string;
+  name: string;
+  title: string | null;
+  profile_url: string | null;
+  source: string | null;
+  hook: string | null;
+  draft_note: string | null;
+  draft_message: string | null;
+  status: ContactStatus;
+  sent_at: string | null;
+  replied_at: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/** LinkedIn rejects connection notes longer than this. Enforced in code wherever a note is produced. */
+export const NOTE_MAX_CHARS = 300;
+
+/** A `messaged` thread with no reply after this many days needs a nudge. */
+export const FOLLOW_UP_DAYS = 7;
+
+export function nextContactStatus(s: ContactStatus): ContactStatus | null {
+  const i = CONTACT_STATUSES.indexOf(s);
+  const next = CONTACT_STATUSES[i + 1];
+  return next && next !== "dead" ? next : null;
+}
+
+export function needsFollowUp(c: Pick<Contact, "status" | "sent_at" | "replied_at">, now = Date.now()): boolean {
+  if (c.status !== "messaged" || !c.sent_at || c.replied_at) return false;
+  return now - new Date(c.sent_at).getTime() > FOLLOW_UP_DAYS * 24 * 60 * 60 * 1000;
+}
+
+/** A thread the user is waiting on: request or message out, nothing back yet. */
+export function isAwaitingReply(c: Pick<Contact, "status" | "replied_at">): boolean {
+  return (c.status === "requested" || c.status === "messaged") && !c.replied_at;
+}
+
+export type OutreachHook = { text: string; url: string | null; source: string | null };
+
+/**
+ * Coerce whatever n8n wrote into a list of plain-text hooks. Accepts an array of
+ * strings or of objects with text/hook/summary + url/link + source keys. Anything
+ * else yields an empty list: a malformed column is a non-event, not an error.
+ */
+export function parseHooks(raw: unknown): OutreachHook[] {
+  if (!Array.isArray(raw)) return [];
+  const out: OutreachHook[] = [];
+  for (const item of raw) {
+    if (typeof item === "string") {
+      if (item.trim()) out.push({ text: item.trim(), url: null, source: null });
+      continue;
+    }
+    if (!item || typeof item !== "object") continue;
+    const o = item as Record<string, unknown>;
+    const text = [o.text, o.hook, o.summary, o.title].find((v) => typeof v === "string" && v.trim()) as string | undefined;
+    if (!text) continue;
+    const urlRaw = [o.url, o.link, o.href].find((v) => typeof v === "string") as string | undefined;
+    const url = urlRaw && /^https?:\/\//i.test(urlRaw.trim()) ? urlRaw.trim() : null;
+    const source = typeof o.source === "string" && o.source.trim() ? o.source.trim() : null;
+    out.push({ text: text.trim(), url, source });
+  }
+  return out;
+}
 
 /**
  * The dedup service sets `dedup_group` to the primary's own id for every row

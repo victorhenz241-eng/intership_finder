@@ -11,10 +11,12 @@ import {
   type ReactNode,
 } from "react";
 import { getSupabase } from "./supabase";
-import type { Role } from "./types";
+import type { Contact, Role } from "./types";
 
 type Status = "loading" | "ready" | "error";
 type Patch = Partial<Pick<Role, "stage" | "notes">>;
+export type ContactPatch = Partial<Omit<Contact, "id" | "role_id" | "created_at" | "updated_at">>;
+export type NewContact = Pick<Contact, "role_id" | "name"> & Partial<Pick<Contact, "title" | "profile_url" | "source" | "hook">>;
 
 type Store = {
   roles: Role[];
@@ -30,6 +32,14 @@ type Store = {
   updateMany: (ids: string[], patch: Patch) => Promise<string | null>;
   notice: string | null;
   setNotice: (n: string | null) => void;
+  contacts: Contact[];
+  /** role id → its contacts, oldest first. */
+  contactsByRole: Map<string, Contact[]>;
+  /** Null when the contacts table is missing or unreadable; the outreach panel then explains instead of failing. */
+  contactsError: string | null;
+  addContact: (c: NewContact) => Promise<Contact | null>;
+  updateContact: (id: string, patch: ContactPatch) => Promise<string | null>;
+  deleteContact: (id: string) => Promise<string | null>;
 };
 
 const Ctx = createContext<Store | null>(null);
@@ -46,6 +56,8 @@ export function RolesProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [lastLoaded, setLastLoaded] = useState<number | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [contactsError, setContactsError] = useState<string | null>(null);
   const inFlight = useRef<Promise<void> | null>(null);
 
   const refresh = useCallback(async () => {
@@ -67,6 +79,13 @@ export function RolesProvider({ children }: { children: ReactNode }) {
           if (!data || data.length < page) break;
         }
         setRoles(all);
+        // Contacts are small; a failure here must not take the roles down with it.
+        const c = await getSupabase().from("contacts").select("*").order("created_at", { ascending: true });
+        if (c.error) setContactsError(c.error.message);
+        else {
+          setContacts((c.data ?? []) as Contact[]);
+          setContactsError(null);
+        }
         setLastLoaded(Date.now());
         setStatus("ready");
       } catch (e) {
@@ -129,7 +148,54 @@ export function RolesProvider({ children }: { children: ReactNode }) {
     [updateMany]
   );
 
+  const addContact = useCallback(async (c: NewContact) => {
+    const { data, error } = await getSupabase().from("contacts").insert(c).select("*").single();
+    if (error) {
+      setNotice(`Couldn't add contact: ${error.message}`);
+      return null;
+    }
+    const row = data as Contact;
+    setContacts((cs) => [...cs, row]);
+    return row;
+  }, []);
+
+  const updateContact = useCallback(async (id: string, patch: ContactPatch) => {
+    let before: Contact | undefined;
+    setContacts((cs) =>
+      cs.map((c) => {
+        if (c.id !== id) return c;
+        before = c;
+        return { ...c, ...patch };
+      })
+    );
+    const { error } = await getSupabase().from("contacts").update(patch).eq("id", id);
+    if (!error) return null;
+    setContacts((cs) => cs.map((c) => (c.id === id && before ? { ...c, ...pickContact(before, patch) } : c)));
+    const msg = `Couldn't save contact: ${error.message}`;
+    setNotice(msg);
+    return msg;
+  }, []);
+
+  const deleteContact = useCallback(async (id: string) => {
+    let removed: Contact | undefined;
+    setContacts((cs) => {
+      removed = cs.find((c) => c.id === id);
+      return cs.filter((c) => c.id !== id);
+    });
+    const { error } = await getSupabase().from("contacts").delete().eq("id", id);
+    if (!error) return null;
+    if (removed) setContacts((cs) => [...cs, removed as Contact]);
+    const msg = `Couldn't delete contact: ${error.message}`;
+    setNotice(msg);
+    return msg;
+  }, []);
+
   const byId = useMemo(() => new Map(roles.map((r) => [r.id, r])), [roles]);
+  const contactsByRole = useMemo(() => {
+    const m = new Map<string, Contact[]>();
+    for (const c of contacts) m.set(c.role_id, [...(m.get(c.role_id) ?? []), c]);
+    return m;
+  }, [contacts]);
   const groups = useMemo(() => {
     const m = new Map<string, Role[]>();
     for (const r of roles) {
@@ -143,8 +209,11 @@ export function RolesProvider({ children }: { children: ReactNode }) {
   }, [roles]);
 
   const value = useMemo<Store>(
-    () => ({ roles, byId, groups, status, error, lastLoaded, refresh, update, updateMany, notice, setNotice }),
-    [roles, byId, groups, status, error, lastLoaded, refresh, update, updateMany, notice]
+    () => ({
+      roles, byId, groups, status, error, lastLoaded, refresh, update, updateMany, notice, setNotice,
+      contacts, contactsByRole, contactsError, addContact, updateContact, deleteContact,
+    }),
+    [roles, byId, groups, status, error, lastLoaded, refresh, update, updateMany, notice, contacts, contactsByRole, contactsError, addContact, updateContact, deleteContact]
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
@@ -155,6 +224,12 @@ function pick(from: Role, patch: Patch): Patch {
   if ("stage" in patch) out.stage = from.stage;
   if ("notes" in patch) out.notes = from.notes;
   return out;
+}
+
+function pickContact(from: Contact, patch: ContactPatch): ContactPatch {
+  const out: Record<string, unknown> = {};
+  for (const k of Object.keys(patch)) out[k] = from[k as keyof Contact];
+  return out as ContactPatch;
 }
 
 export function useRoles(): Store {
