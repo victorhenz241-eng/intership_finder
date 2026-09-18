@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { useRoles } from "@/lib/store";
 import { useQueryState } from "@/lib/url";
 import {
@@ -15,6 +15,8 @@ import {
 } from "@/lib/types";
 import { shortDate } from "@/lib/format";
 import ScoreChip from "./ScoreChip";
+import AutosaveText from "./AutosaveText";
+import Outreach from "./Outreach";
 
 const SEVERITY_LABEL = { strong: "Strong match", decent: "Decent match", skip: "Probably skip" } as const;
 
@@ -192,12 +194,16 @@ function DrawerBody({ role, onClose }: { role: Role; onClose: () => void }) {
           </section>
         )}
 
-        <Notes role={role} save={(notes) => update(role.id, { notes })} />
+        <AutosaveText
+          id="notes"
+          label="Notes"
+          value={role.notes ?? ""}
+          save={(notes) => update(role.id, { notes })}
+          placeholder="Anything worth remembering about this role"
+          className="mt-6"
+        />
 
-        <section className="mt-6 rounded-md border border-dashed border-rule-2 p-4">
-          <h3 className="text-xs text-ink-3">Draft outreach · CV emphasis</h3>
-          <p className="mt-1 text-sm text-ink-3">Coming in a later iteration. This space is reserved.</p>
-        </section>
+        {inPipeline && <Outreach role={role} />}
       </div>
     </div>
   );
@@ -287,68 +293,5 @@ function StageControls({ role, nextStage, inPipeline }: { role: Role; nextStage:
         </button>
       )}
     </div>
-  );
-}
-
-function Notes({ role, save }: { role: Role; save: (notes: string) => Promise<string | null> }) {
-  const [text, setText] = useState(role.notes ?? "");
-  const [state, setState] = useState<"idle" | "dirty" | "saving" | "saved" | "error">("idle");
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const latest = useRef(text);
-  latest.current = text;
-  const persisted = useRef(role.notes ?? "");
-
-  const flush = async () => {
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = null;
-    const value = latest.current;
-    if (value === persisted.current) return;
-    setState("saving");
-    const err = await save(value);
-    if (err) setState("error");
-    else {
-      persisted.current = value;
-      setState(latest.current === value ? "saved" : "dirty");
-    }
-  };
-
-  const onChange = (v: string) => {
-    setText(v);
-    setState("dirty");
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(flush, 800);
-  };
-
-  // Flush a pending edit when the drawer closes or switches role.
-  useEffect(() => {
-    return () => {
-      if (timer.current) {
-        clearTimeout(timer.current);
-        if (latest.current !== persisted.current) save(latest.current);
-      }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  return (
-    <section className="mt-6">
-      <div className="flex items-baseline justify-between">
-        <label htmlFor="notes" className="text-xs text-ink-3">
-          Notes
-        </label>
-        <span className="text-xs text-ink-3" aria-live="polite">
-          {state === "saving" ? "Saving…" : state === "saved" ? "Saved" : state === "error" ? "Not saved" : state === "dirty" ? "Unsaved" : ""}
-        </span>
-      </div>
-      <textarea
-        id="notes"
-        value={text}
-        onChange={(e) => onChange(e.target.value)}
-        onBlur={flush}
-        rows={4}
-        placeholder="Anything worth remembering about this role"
-        className="mt-1.5 w-full resize-y rounded-md border border-rule-2 bg-card px-2.5 py-2 text-sm leading-relaxed text-ink placeholder:text-ink-3"
-      />
-    </section>
   );
 }
