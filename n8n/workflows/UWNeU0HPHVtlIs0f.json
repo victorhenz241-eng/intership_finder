@@ -1,0 +1,125 @@
+{
+  "updatedAt": "2026-10-07T10:18:17.418Z",
+  "createdAt": "2026-10-07T10:16:01.204Z",
+  "id": "UWNeU0HPHVtlIs0f",
+  "name": "W6 Error alert",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {},
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "79590e35-c331-4168-b8ed-3ff4cdc06410"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build the alert from the Error Trigger's data and escape it for Telegram's HTML mode.\nconst d = $input.first().json;\nconst esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst wf = d.workflow?.name || 'unknown workflow';\nconst node = d.execution?.lastNodeExecuted || d.trigger?.error?.node?.name || 'unknown node';\nconst msg = d.execution?.error?.message || d.trigger?.error?.message || 'no error message';\nconst when = $now.setZone('Europe/Luxembourg').toFormat('dd LLL yyyy, HH:mm');\nconst text = [\n  '<b>Internship Radar: a workflow failed</b>',\n  `Workflow: ${esc(wf)}`,\n  `Node: ${esc(node)}`,\n  `Error: ${esc(msg).slice(0, 1500)}`,\n  `When: ${when}`,\n  d.execution?.id ? `Execution id: ${esc(d.execution.id)}` : '',\n].filter(Boolean).join('\\n');\nreturn [{ json: { chat_id: '7511678484', text } }];"
+      },
+      "name": "Build alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        0
+      ],
+      "id": "35fb4981-e30d-4ebc-a6ca-21880e5be251"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.text }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "name": "Send alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        448,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "id": "2c6f1933-e7a7-48fe-a298-a5db61b07fc7",
+      "webhookId": "c26770c2-4e2f-4fa8-b3a0-9f075cefc0d6",
+      "credentials": {
+        "telegramApi": {
+          "id": "N7TsvE2oLFZZPNmB",
+          "name": "Telegram account 2"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Build alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build alert": {
+      "main": [
+        [
+          {
+            "node": "Send alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "staticData": null,
+  "meta": null,
+  "nodeGroups": [],
+  "pinData": {},
+  "versionId": "784ee978-0cd2-46f7-af27-6128c81f0898",
+  "activeVersionId": "784ee978-0cd2-46f7-af27-6128c81f0898",
+  "versionCounter": 2,
+  "triggerCount": 0,
+  "sourceWorkflowId": null,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-10-07T10:16:01.209Z",
+      "createdAt": "2026-10-07T10:16:01.209Z",
+      "role": "workflow:owner",
+      "workflowId": "UWNeU0HPHVtlIs0f",
+      "projectId": "OJGHyjkrDjPB46wB",
+      "project": {
+        "updatedAt": "2026-10-07T09:01:59.335Z",
+        "createdAt": "2026-09-28T12:30:17.830Z",
+        "id": "OJGHyjkrDjPB46wB",
+        "name": "Victor Henz <victorhenz241@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "dd9c984d-10bd-471d-9e9a-4e69cbed373d"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": "Version 784ee978",
+    "description": ""
+  }
+}

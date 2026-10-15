@@ -1,0 +1,370 @@
+{
+  "updatedAt": "2026-10-15T19:43:05.685Z",
+  "createdAt": "2026-09-28T12:36:22.212Z",
+  "id": "Ka08e5LBdQj22LO1",
+  "name": "Internship Radar — Sweep (Simplify)",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Wide sweep — Simplify GitHub listings\nFetch the SimplifyJobs Summer 2027 listings.json (~16k roles) then coarse-filter (active, software/AI, Summer 2027, US/remote) then drop IDs already in the DB then cap 40 newest then score with Groq (throttled) then insert.\n\nRun a few times to backfill; after that each run only scores new postings.",
+        "height": 288,
+        "width": 352,
+        "color": 6
+      },
+      "id": "dc67f208-52fb-4d5e-b682-07425636db9d",
+      "name": "Sticky Note 3da3dfa4",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        192,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 2
+            }
+          ]
+        }
+      },
+      "id": "c8a6ba76-6359-4cb6-8295-48640ef24399",
+      "name": "Daily 02:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        -16,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "roles",
+        "returnAll": true,
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "source",
+              "condition": "eq",
+              "keyValue": "simplify"
+            }
+          ]
+        }
+      },
+      "id": "6f7cd081-97a5-4b1a-9d02-0043f829f6ed",
+      "name": "Read Existing IDs",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        160,
+        304
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "CfCXFGe3Ty7MGCBM",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "5277790d-d2b7-4c0c-99c1-5f7909171bf5",
+      "name": "Run Now",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -16,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const existing = new Set(($(\"Aggregate IDs\").first().json.ids) || []);\nlet arr = [];\nconst resp = await this.helpers.httpRequest({ url: \"https://raw.githubusercontent.com/SimplifyJobs/Summer2027-Internships/dev/.github/scripts/listings.json\", json: true, timeout: 30000 });\narr = Array.isArray(resp) ? resp : [];\nconst BAD = [\"canada\", \", on\", \", bc\", \", qc\", \", ab\", \", ns\", \"toronto\", \"vancouver\", \"montreal\", \"ottawa\", \"united kingdom\", \"london\", \"india\", \"ireland\", \"germany\", \"france\", \"spain\", \"singapore\", \"australia\"];\nconst out = [];\nfor (const e of arr) {\n  if (!e || e.active !== true || e.is_visible === false) continue;\n  const cat = String(e.category || \"\").toLowerCase();\n  const catOk = cat.includes(\"software\") || cat.includes(\"ai/ml\") || cat.includes(\"machine learning\") || cat.includes(\"data science\") || cat.includes(\"data\");\n  if (!catOk) continue;\n  const terms = (Array.isArray(e.terms) ? e.terms.join(\" \") : String(e.terms || \"\")).toLowerCase();\n  if (!terms.includes(\"summer 2027\")) continue;\n  const locArr = Array.isArray(e.locations) ? e.locations : [e.locations];\n  const loc = locArr.filter(Boolean).join(\"; \");\n  const locL = loc.toLowerCase();\n  if (BAD.some(b => locL.includes(b))) continue;\n  const id = String(e.id || e.url || \"\");\n  if (!id || existing.has(id)) continue;\n  const posted = e.date_posted ? new Date(e.date_posted * 1000).toISOString() : null;\n  const meta = \"Category: \" + (e.category || \"n/a\") + \". Terms: \" + (Array.isArray(e.terms) ? e.terms.join(\", \") : \"n/a\") + \". Sponsorship: \" + (e.sponsorship || \"n/a\") + \". Degrees: \" + ((Array.isArray(e.degrees) ? e.degrees.join(\", \") : \"\") || \"n/a\") + \".\";\n  out.push({ json: { source: \"simplify\", external_id: id, company: e.company_name || \"\", title: e.title || \"\", location: loc, url: e.url || e.company_url || \"\", description: meta, posted_at: posted, _sort: e.date_posted || 0 } });\n}\nout.sort((a, b) => b.json._sort - a.json._sort);\nconst top = out.slice(0, 40);\nfor (const o of top) { delete o.json._sort; }\nreturn top;"
+      },
+      "id": "61f90796-33b5-47fc-811e-e2c8b1f21efd",
+      "name": "Fetch & Filter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        864,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const j = $input.item.json;\nconst profile = \"Victor is a data-science/AI engineer looking for a SUMMER 2027 internship in the UNITED STATES.\\nBackground: builds AI/data products at Canal+/BCE (media and broadcasting); focus on LLMs plus structured data; student in an AI dual-degree (ESSEC / CentraleSupelec).\\nSTRONG match: AI/ML engineering internships at (a) media/broadcasting/streaming companies (his Canal+ experience is a direct edge), (b) genuine AI labs/companies, (c) major software and cloud companies, (d) AI-tooling companies.\\nDECENT: AI/ML/data internship roles at companies that are not AI-centred.\\nSKIP: non-technical roles, senior or full-time-only roles, non-US locations, anything unrelated to software/AI/ML/data.\";\nconst rubric = \"You are given limited metadata (company, title, location, category) rather than a full description. Judge fit on that.\\nScore how well THIS role fits Victor, 0-100, and pick a severity.\\nseverity: strong (>=75, worth an instant alert), decent (45-74, worth tracking), skip (<45).\\nPenalize heavily if: not US, not an internship, or not software/AI/ML/data.\\nReturn ONLY compact JSON with keys fit_score (int 0-100), severity (strong|decent|skip), why (one sentence, max 25 words).\";\nconst user = \"Company: \" + j.company + \"\\nTitle: \" + j.title + \"\\nLocation: \" + j.location + \"\\nDetails: \" + j.description;\n// 1200 not 300: gpt-oss-120b reasons before answering; at 300 Groq's JSON mode failed with \"max completion tokens reached\" (~7% of calls).\nconst payload = { model: \"openai/gpt-oss-120b\", temperature: 0.2, max_tokens: 1200, response_format: { type: \"json_object\" }, messages: [ { role: \"system\", content: profile + \"\\n\\n\" + rubric }, { role: \"user\", content: user } ] };\nreturn { json: Object.assign({}, j, { body: JSON.stringify(payload) }) };"
+      },
+      "id": "f5e6962d-1cd9-444d-a45a-c689b1564faa",
+      "name": "Build Score Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $json.body }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 5000
+            }
+          },
+          "timeout": 20000
+        }
+      },
+      "id": "1b24fcc8-3bec-4311-9d2a-724a7d0cd60c",
+      "name": "Score (Groq)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1312,
+        304
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "gvmwpRcz6jcceGwG",
+          "name": "Header Auth account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const r = $input.item.json;\nconst j = $(\"Build Score Request\").item.json;\nconst base = { source: j.source, external_id: j.external_id, company: j.company, title: j.title, location: j.location, url: j.url, description: j.description, posted_at: j.posted_at };\n// A failed call (HTTP error item, empty or unparseable content) is NOT a verdict.\n// Write the app's \"unscored\" state (all null) so the row is findable with `fit_score is null` and can be re-scored.\nconst unscored = { fit_score: null, severity: null, why: null };\nif (r.error) return { json: Object.assign(base, unscored) };\nlet content = \"\";\ntry { content = r.choices[0].message.content || \"\"; } catch (e) {}\nlet p = null;\nif (content) { try { p = JSON.parse(content); } catch (e) { const m = content.match(/\\{[\\s\\S]*\\}/); if (m) { try { p = JSON.parse(m[0]); } catch (e2) {} } } }\nif (!p || typeof p !== \"object\") return { json: Object.assign(base, unscored) };\nlet score = Number(p.fit_score);\nconst sevOk = [\"strong\", \"decent\", \"skip\"].includes(p.severity);\nif (!isFinite(score) && !sevOk) return { json: Object.assign(base, unscored) };\nif (!isFinite(score)) score = p.severity === \"strong\" ? 75 : p.severity === \"decent\" ? 45 : 0;\nscore = Math.max(0, Math.min(100, Math.round(score)));\nconst sev = sevOk ? p.severity : score >= 75 ? \"strong\" : score >= 45 ? \"decent\" : \"skip\";\nreturn { json: Object.assign(base, { fit_score: score, severity: sev, why: String(p.why || \"\").slice(0, 300) }) };"
+      },
+      "id": "830b90df-ee8d-45ea-8fa5-af588b39c6a4",
+      "name": "Parse Score",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "tableId": "roles",
+        "dataToSend": "autoMapInputData"
+      },
+      "id": "c14f0878-5cb3-481f-903a-0cad2f01e37b",
+      "name": "Save Role",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1824,
+        304
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "CfCXFGe3Ty7MGCBM",
+          "name": "Supabase account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const ids = $input.all().map(i => (i.json ? i.json.external_id : undefined)).filter(Boolean);\nreturn [{ json: { ids } }];"
+      },
+      "id": "0044bd8e-e751-4ee1-a75c-0d5c3d074021",
+      "name": "Aggregate IDs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        304,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -16,
+        144
+      ],
+      "id": "638845db-58dd-4b36-a05c-9ee699e6458c",
+      "name": "When Executed by Another Workflow"
+    }
+  ],
+  "connections": {
+    "Run Now": {
+      "main": [
+        [
+          {
+            "node": "Read Existing IDs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Score Request": {
+      "main": [
+        [
+          {
+            "node": "Score (Groq)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Score (Groq)": {
+      "main": [
+        [
+          {
+            "node": "Parse Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Score": {
+      "main": [
+        [
+          {
+            "node": "Save Role",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Existing IDs": {
+      "main": [
+        [
+          {
+            "node": "Aggregate IDs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate IDs": {
+      "main": [
+        [
+          {
+            "node": "Fetch & Filter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch & Filter": {
+      "main": [
+        [
+          {
+            "node": "Build Score Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily 02:00": {
+      "main": [
+        [
+          {
+            "node": "Read Existing IDs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Read Existing IDs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timezone": "Europe/Luxembourg",
+    "saveDataErrorExecution": "all",
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "UWNeU0HPHVtlIs0f",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": {
+    "node:Daily 02:00": {
+      "recurrenceRules": [
+        null
+      ],
+      "recurrenceRuleSignatures": [
+        null
+      ]
+    }
+  },
+  "meta": null,
+  "nodeGroups": [],
+  "pinData": {},
+  "versionId": "d0ad7510-68da-46fd-bf5a-2aad29e1b27e",
+  "activeVersionId": "d0ad7510-68da-46fd-bf5a-2aad29e1b27e",
+  "versionCounter": 10,
+  "triggerCount": 1,
+  "sourceWorkflowId": null,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-09-28T12:36:22.214Z",
+      "createdAt": "2026-09-28T12:36:22.214Z",
+      "role": "workflow:owner",
+      "workflowId": "Ka08e5LBdQj22LO1",
+      "projectId": "OJGHyjkrDjPB46wB",
+      "project": {
+        "updatedAt": "2026-10-07T09:01:59.335Z",
+        "createdAt": "2026-09-28T12:30:17.830Z",
+        "id": "OJGHyjkrDjPB46wB",
+        "name": "Victor Henz <victorhenz241@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "dd9c984d-10bd-471d-9e9a-4e69cbed373d"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": "Version d0ad7510",
+    "description": ""
+  }
+}

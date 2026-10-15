@@ -1,0 +1,297 @@
+{
+  "updatedAt": "2026-10-07T10:19:26.230Z",
+  "createdAt": "2026-09-28T12:36:22.041Z",
+  "id": "gio7uzVjrxY3Ospb",
+  "name": "Internship Radar — Dedup (Rust)",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "daysInterval": 1,
+              "triggerAtHour": 2,
+              "triggerAtMinute": 30
+            }
+          ]
+        }
+      },
+      "id": "abc1a164-5b83-4b1d-8925-1f259f6e9dca",
+      "name": "Daily 02:30",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        208
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "2f8849b4-c832-4d1d-a211-472f51910ca8",
+      "name": "Run Now",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "roles",
+        "returnAll": true,
+        "orderBy": "id",
+        "filterType": "none"
+      },
+      "id": "b4ba748e-58c8-4ce6-b952-be013d1c09d3",
+      "name": "Read Roles",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        256,
+        304
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "CfCXFGe3Ty7MGCBM",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const roles = $input.all().map(i => ({\n  id: i.json.id,\n  company: i.json.company || \"\",\n  title: i.json.title || \"\",\n  location: i.json.location ?? null,\n  url: i.json.url ?? null,\n  source: i.json.source ?? null,\n  stage: i.json.stage ?? null,\n  fit_score: i.json.fit_score ?? null,\n  why: i.json.why ?? null,\n  description: i.json.description ?? null,\n  first_seen: i.json.first_seen ?? null\n}));\nreturn [{ json: { roles } }];"
+      },
+      "id": "b0f80355-f94c-4d23-8ea7-2537312f8994",
+      "name": "Batch Into One Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        512,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://dedup:8080/dedup",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ roles: $json.roles }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "5cf78ca6-40b8-408c-846a-65913da53a55",
+      "name": "POST /dedup",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        768,
+        304
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "const before = new Map($(\"Read Roles\").all().map(i => [i.json.id, i.json.dedup_group ?? null]));\nconst out = [];\nfor (const a of $input.first().json.assignments) {\n  if (!before.has(a.id)) continue;\n  if (before.get(a.id) !== a.dedup_group) out.push({ json: { id: a.id, dedup_group: a.dedup_group } });\n}\nreturn out;"
+      },
+      "id": "3882275b-5327-4cce-afb2-50ac77390614",
+      "name": "Only Changed Rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1024,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://opwhysmfvizkfzgntkne.supabase.co/rest/v1/roles?id=eq.{{ $json.id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ dedup_group: $json.dedup_group }) }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 10,
+              "batchInterval": 200
+            }
+          },
+          "timeout": 15000
+        }
+      },
+      "id": "7c84cf64-81da-4788-afa0-bde43472d30a",
+      "name": "Write dedup_group",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1280,
+        304
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "supabaseApi": {
+          "id": "CfCXFGe3Ty7MGCBM",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## Dedup roles via the Rust service\nReads every row, posts them in one request to `POST /dedup` (services/dedup in the repo), and PATCHes only rows whose `dedup_group` changed. A row is primary when `dedup_group` is null or equals its own id; the app folds the rest.\n\n**Self-hosted.** The service runs as the `dedup` container next to n8n on the same VM (docker compose), reached at http://dedup:8080 on the private network. It is always up, so the old Render cold-start workaround (wake ping + 45 s wait) is gone.",
+        "height": 300,
+        "width": 320,
+        "color": 6
+      },
+      "id": "05437385-1849-4265-8354-b904aa900d82",
+      "name": "Sticky Note 2a1017a2",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        144,
+        480
+      ]
+    }
+  ],
+  "connections": {
+    "Daily 02:30": {
+      "main": [
+        [
+          {
+            "node": "Read Roles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Now": {
+      "main": [
+        [
+          {
+            "node": "Read Roles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Roles": {
+      "main": [
+        [
+          {
+            "node": "Batch Into One Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Batch Into One Request": {
+      "main": [
+        [
+          {
+            "node": "POST /dedup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST /dedup": {
+      "main": [
+        [
+          {
+            "node": "Only Changed Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Only Changed Rows": {
+      "main": [
+        [
+          {
+            "node": "Write dedup_group",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timezone": "Europe/Luxembourg",
+    "saveDataErrorExecution": "all",
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "UWNeU0HPHVtlIs0f",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": {
+    "node:Daily 02:30": {
+      "recurrenceRules": [
+        null
+      ],
+      "recurrenceRuleSignatures": [
+        null
+      ]
+    }
+  },
+  "meta": null,
+  "nodeGroups": [],
+  "pinData": null,
+  "versionId": "0a875845-3c29-4575-906d-103c084f66d3",
+  "activeVersionId": "0a875845-3c29-4575-906d-103c084f66d3",
+  "versionCounter": 2,
+  "triggerCount": 1,
+  "sourceWorkflowId": null,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-09-28T12:36:22.045Z",
+      "createdAt": "2026-09-28T12:36:22.045Z",
+      "role": "workflow:owner",
+      "workflowId": "gio7uzVjrxY3Ospb",
+      "projectId": "OJGHyjkrDjPB46wB",
+      "project": {
+        "updatedAt": "2026-10-07T09:01:59.335Z",
+        "createdAt": "2026-09-28T12:30:17.830Z",
+        "id": "OJGHyjkrDjPB46wB",
+        "name": "Victor Henz <victorhenz241@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "dd9c984d-10bd-471d-9e9a-4e69cbed373d"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": null,
+    "description": null
+  }
+}

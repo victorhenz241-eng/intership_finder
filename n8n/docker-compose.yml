@@ -1,0 +1,79 @@
+name: radar
+# Internship Radar — self-hosted n8n + Rust dedup service + Caddy on one small VM.
+# Designed for a Google Cloud e2-micro (1 GB RAM, always-free tier).
+#
+# n8n's editor listens on 127.0.0.1 only and is reached through an SSH tunnel.
+# Caddy is the only public entry point: HTTPS on 443 for victor-internship-radar.duckdns.org,
+# forwarding /webhook/* and /webhook-test/* to n8n (Telegram bot) and returning 404 for everything else.
+
+services:
+  n8n:
+    image: n8nio/n8n:stable
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5678:5678"
+    env_file: .env
+    environment:
+      GENERIC_TIMEZONE: Europe/Luxembourg
+      TZ: Europe/Luxembourg
+      N8N_HOST: localhost
+      N8N_PORT: "5678"
+      N8N_PROTOCOL: http
+      N8N_SECURE_COOKIE: "false"          # editor is reached over an SSH tunnel on http://localhost
+      WEBHOOK_URL: https://victor-internship-radar.duckdns.org/   # public URL Telegram calls
+      N8N_PROXY_HOPS: "1"                 # n8n sits behind Caddy
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_PERSONALIZATION_ENABLED: "false"
+      N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: "true"
+      # Keep the SQLite database small on a 30 GB disk: drop executions older than 14 days.
+      EXECUTIONS_DATA_PRUNE: "true"
+      EXECUTIONS_DATA_MAX_AGE: "336"
+      DB_SQLITE_VACUUM_ON_STARTUP: "true"
+      NODE_OPTIONS: "--max-old-space-size=640"
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./workflows:/import/workflows:ro
+      - ./secrets:/import/secrets:ro
+    depends_on:
+      - dedup
+
+  dedup:
+    build:
+      context: ${DEDUP_SRC:-../../services/dedup}
+      # Same as services/dedup/Dockerfile, but without LTO so it compiles
+      # inside 1 GB RAM + swap. The binary is a little bigger, behaviour identical.
+      dockerfile_inline: |
+        FROM rust:1.92-slim AS build
+        WORKDIR /app
+        ENV CARGO_PROFILE_RELEASE_LTO=false CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16 CARGO_BUILD_JOBS=1
+        COPY Cargo.toml Cargo.lock* ./
+        COPY src ./src
+        RUN cargo build --release --locked || cargo build --release
+        FROM debian:bookworm-slim
+        RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
+        COPY --from=build /app/target/release/dedup-service /usr/local/bin/dedup-service
+        ENV PORT=8080
+        EXPOSE 8080
+        CMD ["dedup-service"]
+    restart: unless-stopped
+    environment:
+      PORT: "8080"
+    # Not published on the host: only n8n reaches it, at http://dedup:8080
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - n8n
+
+volumes:
+  n8n_data:
+  caddy_data:
+  caddy_config:

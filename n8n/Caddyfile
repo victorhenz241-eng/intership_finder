@@ -1,0 +1,11 @@
+victor-internship-radar.duckdns.org {
+	handle /webhook/* {
+		reverse_proxy n8n:5678
+	}
+	handle /webhook-test/* {
+		reverse_proxy n8n:5678
+	}
+	handle {
+		respond 404
+	}
+}

@@ -1,0 +1,174 @@
+{
+  "updatedAt": "2026-10-08T10:23:43.944Z",
+  "createdAt": "2026-10-07T16:18:52.052Z",
+  "id": "sQGojMAVqjsMcp0t",
+  "name": "SW Query roles",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "company"
+            },
+            {
+              "name": "severity"
+            },
+            {
+              "name": "stage"
+            },
+            {
+              "name": "days",
+              "type": "number"
+            },
+            {
+              "name": "limit",
+              "type": "number"
+            }
+          ]
+        }
+      },
+      "name": "When called by the bot",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "5266d448-f4da-4984-ad2c-84777346825f"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Turn the agent's search options into a Supabase (PostgREST) filter string.\n// Every input is optional; anything missing or unrecognised is simply not filtered on.\nconst i = $input.first().json;\nconst clean = s => String(s ?? '').trim();\nconst parts = [];\nconst rawCompany = clean(i.company);\nconst company = /^(any|all|none|null|n\\/a|-)?$/i.test(rawCompany) ? '' : rawCompany.replace(/[^A-Za-z0-9-]+/g, '*').replace(/^\\*+|\\*+$/g, '');\nif (company) parts.push(`company=ilike.*${company}*`);\nconst severity = clean(i.severity).toLowerCase();\nif (['strong', 'decent', 'skip'].includes(severity)) parts.push(`severity=eq.${severity}`);\nconst stage = clean(i.stage).toLowerCase();\nif (/^[a-z_]+$/.test(stage) && stage !== 'any') parts.push(`stage=eq.${stage}`);\nconst days = Number(i.days) || 0;\nif (days > 0) parts.push(`first_seen=gte.${new Date(Date.now() - days * 864e5).toISOString()}`);\nconst limit = Math.min(Math.max(Number(i.limit) || 20, 1), 50);\n// An empty filter would match everything; \"id=not.is.null\" is a harmless always-true filter.\nreturn [{ json: { filter: parts.length ? parts.join('&') : 'id=not.is.null', limit } }];"
+      },
+      "name": "Build filter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        0
+      ],
+      "id": "448904d5-9373-4884-9e44-70fe9bb082d1"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "roles",
+        "limit": 200,
+        "filterType": "string",
+        "filterString": "={{ $json.filter }}"
+      },
+      "name": "Read roles",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        448,
+        0
+      ],
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "id": "9d44e66c-819b-4e4f-8aef-21e548f3bedd",
+      "credentials": {
+        "supabaseApi": {
+          "id": "CfCXFGe3Ty7MGCBM",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Keep one row per duplicate group, sort by score and return a compact list to the agent.\nconst limit = $('Build filter').first().json.limit;\nconst rows = $input.all().map(x => x.json)\n  .filter(r => r.id && (r.dedup_group == null || r.dedup_group === r.id));\nrows.sort((a, b) => (b.fit_score ?? -1) - (a.fit_score ?? -1));\nconst roles = rows.slice(0, limit).map(r => ({\n  company: r.company, title: r.title, location: r.location,\n  score: r.fit_score, severity: r.severity, stage: r.stage,\n  eligibility: r.eligibility, why: r.why,\n  first_seen: String(r.first_seen || '').slice(0, 10), url: r.url,\n}));\nreturn [{ json: { total_matches: rows.length, returned: roles.length, roles } }];"
+      },
+      "name": "Compact result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        0
+      ],
+      "id": "bc2cc281-9ec1-4990-9bea-fe33be794784"
+    }
+  ],
+  "connections": {
+    "When called by the bot": {
+      "main": [
+        [
+          {
+            "node": "Build filter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build filter": {
+      "main": [
+        [
+          {
+            "node": "Read roles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read roles": {
+      "main": [
+        [
+          {
+            "node": "Compact result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "UWNeU0HPHVtlIs0f",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "meta": null,
+  "nodeGroups": [],
+  "pinData": {},
+  "versionId": "137d4cbb-68fc-44de-b8f4-fc344f7acdee",
+  "activeVersionId": "137d4cbb-68fc-44de-b8f4-fc344f7acdee",
+  "versionCounter": 3,
+  "triggerCount": 0,
+  "sourceWorkflowId": null,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-10-07T16:18:52.061Z",
+      "createdAt": "2026-10-07T16:18:52.061Z",
+      "role": "workflow:owner",
+      "workflowId": "sQGojMAVqjsMcp0t",
+      "projectId": "OJGHyjkrDjPB46wB",
+      "project": {
+        "updatedAt": "2026-10-07T09:01:59.335Z",
+        "createdAt": "2026-09-28T12:30:17.830Z",
+        "id": "OJGHyjkrDjPB46wB",
+        "name": "Victor Henz <victorhenz241@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "dd9c984d-10bd-471d-9e9a-4e69cbed373d"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": "Version 137d4cbb",
+    "description": ""
+  }
+}
